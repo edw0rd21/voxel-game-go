@@ -100,6 +100,9 @@ func main() {
 		// Update player
 		p.Update(deltaTime)
 
+		// Update world chunks based on player position
+		gameWorld.UpdateChunks(cam.Position[0], cam.Position[2])
+
 		// Clear screen
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 

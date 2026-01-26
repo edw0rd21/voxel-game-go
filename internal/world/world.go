@@ -5,11 +5,13 @@ import (
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/ojrac/opensimplex-go"
 )
 
 const (
-	ChunkSize   = 16
-	ChunkHeight = 64
+	ChunkSize      = 16
+	ChunkHeight    = 64
+	RenderDistance = 16
 )
 
 type BlockType uint8
@@ -39,11 +41,13 @@ type ChunkMesh struct {
 
 type World struct {
 	chunks map[[2]int]*Chunk
+	noise  opensimplex.Noise
 }
 
 func NewWorld() *World {
 	w := &World{
 		chunks: make(map[[2]int]*Chunk),
+		noise:  opensimplex.NewNormalized(12345),
 	}
 
 	// Generate initial chunks around spawn
@@ -64,23 +68,48 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 		Z: chunkZ,
 	}
 
-	// Simple terrain generation
+	// Multi-octave terrain generation
 	for x := 0; x < ChunkSize; x++ {
 		for z := 0; z < ChunkSize; z++ {
 			worldX := float64(chunkX*ChunkSize + x)
 			worldZ := float64(chunkZ*ChunkSize + z)
 
-			// Use simple noise-like function for height
-			height := int(30 + 10*math.Sin(worldX*0.1)*math.Cos(worldZ*0.1))
+			// Layer 1: Base terrain (large rolling hills)
+			continentalness := w.noise.Eval2(worldX*0.005, worldZ*0.005)
 
+			// Layer 2: Medium features (hills and valleys)
+			erosion := w.noise.Eval2(worldX*0.02, worldZ*0.02)
+
+			// Layer 3: Fine detail (surface variation)
+			detail := w.noise.Eval2(worldX*0.1, worldZ*0.1)
+
+			// Combine the layers with different weights
+			// Noise values range from -1 to 1, normalize to height
+			baseHeight := 35.0
+			continentalScale := 25.0
+			erosionScale := 10.0
+			detailScale := 3.0
+
+			height := baseHeight +
+				continentalness*continentalScale +
+				erosion*erosionScale +
+				detail*detailScale
+
+			heightInt := int(height)
+
+			// Generate terrain layers
 			for y := 0; y < ChunkHeight; y++ {
-				if y < height-3 {
+				if y < heightInt-4 {
+					// Deep underground = stone
 					chunk.Blocks[x][y][z].Type = BlockStone
-				} else if y < height {
+				} else if y < heightInt {
+					// Near surface = dirt
 					chunk.Blocks[x][y][z].Type = BlockDirt
-				} else if y == height {
+				} else if y == heightInt {
+					// Surface = grass
 					chunk.Blocks[x][y][z].Type = BlockGrass
 				} else {
+					// Above ground = air
 					chunk.Blocks[x][y][z].Type = BlockAir
 				}
 			}
@@ -368,5 +397,47 @@ func (w *World) SetBlock(x, y, z int, blockType BlockType) {
 		if neighbor, ok := w.chunks[[2]int{chunkX, chunkZ + 1}]; ok {
 			neighbor.generateMesh(w)
 		}
+	}
+}
+
+func (w *World) UpdateChunks(playerX, playerZ float32) {
+	// Calculate which chunk the player is in
+	playerChunkX := int(math.Floor(float64(playerX))) / ChunkSize
+	playerChunkZ := int(math.Floor(float64(playerZ))) / ChunkSize
+
+	// Generate chunks in render distance
+	for x := playerChunkX - RenderDistance; x <= playerChunkX+RenderDistance; x++ {
+		for z := playerChunkZ - RenderDistance; z <= playerChunkZ+RenderDistance; z++ {
+			chunkKey := [2]int{x, z}
+
+			// If chunk doesn't exist, generate it
+			if _, exists := w.chunks[chunkKey]; !exists {
+				chunk := w.generateChunk(x, z)
+				w.chunks[chunkKey] = chunk
+				chunk.generateMesh(w)
+			}
+		}
+	}
+
+	// Unload chunks that are too far away
+	toDelete := make([][2]int, 0)
+	for key := range w.chunks {
+		dx := key[0] - playerChunkX
+		dz := key[1] - playerChunkZ
+		distance := math.Sqrt(float64(dx*dx + dz*dz))
+
+		if distance > float64(RenderDistance+2) {
+			// Clean up OpenGL resources
+			if w.chunks[key].Mesh != nil {
+				gl.DeleteVertexArrays(1, &w.chunks[key].Mesh.VAO)
+				gl.DeleteBuffers(1, &w.chunks[key].Mesh.VBO)
+			}
+			toDelete = append(toDelete, key)
+		}
+	}
+
+	// Delete the chunks
+	for _, key := range toDelete {
+		delete(w.chunks, key)
 	}
 }
