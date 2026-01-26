@@ -4,13 +4,20 @@ A simple Minecraft-like voxel game built in Go with OpenGL.
 
 ## Features
 
-- ✅ 3D voxel-based world with chunk system
-- ✅ Procedural terrain generation
-- ✅ First-person camera with mouse look
-- ✅ WASD movement with physics (gravity, collision)
-- ✅ Block placement and destruction
-- ✅ Multiple block types (grass, dirt, stone)
-- ✅ Optimized rendering (only visible faces)
+- 3D voxel-based world with chunk system
+- Infinite world generation with dynamic chunk loading/unloading
+- Terrain generation using multi-octave noise
+- First-person camera with mouse look
+- WASD movement with physics (gravity, collision)
+- Block placement and destruction
+- Multiple block types (grass, dirt, stone)
+
+### Performance optimizations:
+- Face culling (only visible block faces rendered)
+- Frustum culling (chunks behind camera not rendered)
+- Chunk update throttling
+- Directional face shading for better depth perception
+
 
 ## Controls
 
@@ -20,6 +27,10 @@ A simple Minecraft-like voxel game built in Go with OpenGL.
 - **Left Click** - Break block
 - **Right Click** - Place block
 - **1, 2, 3** - Select block type (1=Dirt, 2=Grass, 3=Stone)
+- **V** - Toggle creative flying mode (fly but still collide with blocks)
+- **N** - Toggle NoClip mode (fly through everything, no collision)
+- **F** - Toggle wireframe mode (see mesh optimization)
+- **Tab** - Toggle cursor lock (free cursor vs camera control)
 - **ESC** - Exit game
 
 ## Prerequisites (macOS)
@@ -55,7 +66,7 @@ cd voxel-game
 
 ### 2. Download Go dependencies
 ```bash
-go mod download
+go mod tidy
 ```
 
 ### 3. Build the game
@@ -96,8 +107,32 @@ pkg-config --libs glfw3
 - Check the console output for OpenGL version info
 
 ### Performance issues
-- The game generates chunks around spawn, which might take a moment
-- Try reducing the render distance by modifying the chunk generation range in `world.go`
+- If you are not consistently getting 60+ FPS on modern hardware, try the following:
+
+#### Quick fixes:
+
+- Reduce render distance in internal/world/world.go:
+```bash
+RenderDistance = 2  // Change from 3 to 2
+```
+
+- Increase chunk update interval in cmd/game/main.go:
+```bash
+chunkUpdateInterval := 1.0  // Change from 0.5 to 1.0
+```
+
+- Disable VSync for unlimited FPS (more GPU usage):
+
+```bash
+glfw.SwapInterval(0)  // Change from 1 to 0
+```
+#### Performance features already enabled:
+
+- Face culling (only visible block faces)
+- Frustum culling (chunks behind camera not rendered)
+- Chunk update throttling (not every frame)
+- Dynamic chunk loading/unloading
+
 
 ## Project Structure
 
@@ -129,8 +164,26 @@ voxel-game/
 ### Chunk System
 The world is divided into 16x64x16 chunks. Each chunk contains blocks and generates its own mesh. Only visible block faces are rendered (faces adjacent to other solid blocks are culled).
 
+### Infinite World:
+
+- Chunks dynamically load as you explore
+- Chunks outside render distance automatically unload (with OpenGL cleanup)
+- Render distance configurable (default: 3 chunks = 48 blocks radius)
+- Chunk updates throttled to every 0.5 seconds for performance
+
+### Rendering Optimizations:
+
+- Face culling: Only exposed block faces are added to mesh
+- Frustum culling: Chunks behind the camera aren't rendered
+- Directional shading: Different brightness per face for depth perception
+
 ### Terrain Generation
-Simple procedural generation using a sine/cosine function for height variation. Each chunk generates terrain based on world coordinates to ensure continuity.
+- Advanced multi-octave noise-based generation using OpenSimplex noise:
+    - Continental layer (0.005 frequency): Large-scale landmasses and oceans
+    - Erosion layer (0.02 frequency): Medium hills and valleys
+    - Detail layer (0.1 frequency): Surface variation and bumps
+
+- Each layer contributes to the final height with different weights, creating realistic and varied terrain. Deterministic generation ensures the same terrain appears at the same coordinates every time.
 
 ### Mesh Generation
 For each chunk, the system:
@@ -163,7 +216,17 @@ Some ideas for extending this project:
 - Water and transparency
 - Day/night cycle with lighting
 - Particles and sound effects
+- Biomes (desert, forest, snow)
+- Caves and underground generation
 - Multiplayer support
+
+## Completed Features
+
+- Better terrain generation (Perlin/Simplex noise)
+- Infinite world generation (load/unload chunks dynamically)
+- Flying/creative mode
+- Performance optimizations
+- Face shading for depth
 
 ## License
 
