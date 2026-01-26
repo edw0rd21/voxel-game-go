@@ -279,12 +279,16 @@ func createFace(x, y, z float32, face int, color mgl32.Vec3) []float32 {
 	// Add slight shading based on face direction
 	shadingFactor := float32(1.0)
 	switch face {
-	case 1: // Back
-		shadingFactor = 0.8
-	case 2, 3: // Sides
-		shadingFactor = 0.9
-	case 5: // Bottom
-		shadingFactor = 0.7
+	case 0: // Front (+Z)
+		shadingFactor = 0.85 // CHANGE from 1.0
+	case 1: // Back (-Z)
+		shadingFactor = 0.75 // CHANGE from 0.8
+	case 2, 3: // Sides (X)
+		shadingFactor = 0.80 // CHANGE from 0.9
+	case 4: // Top (+Y)
+		shadingFactor = 1.0 // Keep brightest
+	case 5: // Bottom (-Y)
+		shadingFactor = 0.6 // CHANGE from 0.7
 	}
 
 	shadedColor := color.Mul(shadingFactor)

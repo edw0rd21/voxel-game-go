@@ -156,12 +156,10 @@ When placing/breaking blocks:
 ## Future Improvements
 
 Some ideas for extending this project:
-- Better terrain generation (Perlin/Simplex noise)
 - Texture mapping instead of solid colors
 - More block types
 - Inventory system
 - Saving/loading worlds
-- Infinite world generation (load/unload chunks dynamically)
 - Water and transparency
 - Day/night cycle with lighting
 - Particles and sound effects
