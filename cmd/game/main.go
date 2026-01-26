@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 
@@ -46,6 +47,9 @@ func main() {
 	}
 	window.MakeContextCurrent()
 
+	// Control VSync
+	glfw.SwapInterval(0) // 1 = VSync on, 0 = VSync off
+
 	// Initialize OpenGL
 	if err := gl.Init(); err != nil {
 		log.Fatalln("failed to initialize OpenGL:", err)
@@ -87,12 +91,30 @@ func main() {
 	// Track delta time
 	lastTime := glfw.GetTime()
 
+	// FPS tracking
+	frameCount := 0
+	fpsTime := glfw.GetTime()
+	currentFPS := 0.0
+
+	// Chunk update throttling
+	lastChunkUpdate := glfw.GetTime()
+	chunkUpdateInterval := 1.0 // Update chunks every 0.5 seconds
+
 	// Game loop
 	for !window.ShouldClose() {
 		// Calculate delta time
 		currentTime := glfw.GetTime()
 		deltaTime := float32(currentTime - lastTime)
 		lastTime = currentTime
+
+		// FPS calculation
+		frameCount++
+		if currentTime-fpsTime >= 1.0 {
+			currentFPS = float64(frameCount) / (currentTime - fpsTime)
+			window.SetTitle(fmt.Sprintf("%s - FPS: %.1f", windowTitle, currentFPS))
+			frameCount = 0
+			fpsTime = currentTime
+		}
 
 		// Handle input
 		inputMgr.Update(deltaTime)
@@ -101,7 +123,9 @@ func main() {
 		p.Update(deltaTime)
 
 		// Update world chunks based on player position
-		gameWorld.UpdateChunks(cam.Position[0], cam.Position[2])
+		if currentTime-lastChunkUpdate >= chunkUpdateInterval {
+			gameWorld.UpdateChunks(cam.Position[0], cam.Position[2])
+		}
 
 		// Clear screen
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)

@@ -119,14 +119,19 @@ func (im *InputManager) keyCallback(w *glfw.Window, key glfw.Key, scancode int, 
 		switch key {
 		case glfw.Key1:
 			im.selectedBlock = world.BlockDirt
+			w.SetTitle("Selected: Dirt")
 		case glfw.Key2:
 			im.selectedBlock = world.BlockGrass
+			w.SetTitle("Selected: Grass")
 		case glfw.Key3:
 			im.selectedBlock = world.BlockStone
+			w.SetTitle("Selected: Stone")
 		case glfw.KeyTab:
 			im.cursorLocked = !im.cursorLocked
+			w.SetTitle("Cursor: Locked")
 			if im.cursorLocked {
 				w.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
+				w.SetTitle("Cursor: Free")
 			} else {
 				w.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
 			}
@@ -134,11 +139,18 @@ func (im *InputManager) keyCallback(w *glfw.Window, key glfw.Key, scancode int, 
 			*im.wireframe = !*im.wireframe
 			if *im.wireframe {
 				gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+				w.SetTitle("Wireframe: ON")
 			} else {
 				gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+				w.SetTitle("Wireframe: OFF")
 			}
 		case glfw.KeyN:
 			im.player.NoClip()
+			if im.player.IsNoClip() {
+				w.SetTitle("God Mode: ON")
+			} else {
+				w.SetTitle("God Mode: OFF")
+			}
 		}
 	}
 }

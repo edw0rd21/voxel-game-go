@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-gl/gl/v4.1-core/gl"
-	"github.com/go-gl/mathgl/mgl32"
 	"voxel-game/internal/camera"
 	"voxel-game/internal/world"
+
+	"github.com/go-gl/gl/v4.1-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 //go:embed shaders/vertex.glsl
@@ -74,8 +75,14 @@ func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
 	gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
 
 	// Render each chunk
+	chunksRendered := 0
 	for _, chunk := range w.GetChunks() {
 		if chunk.Mesh == nil || chunk.Mesh.VertexCount == 0 {
+			continue
+		}
+
+		// Frustum culling
+		if !cam.IsChunkVisible(chunk.X, chunk.Z, 16) {
 			continue
 		}
 
@@ -87,6 +94,8 @@ func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
 		gl.BindVertexArray(chunk.Mesh.VAO)
 		gl.DrawArrays(gl.TRIANGLES, 0, int32(chunk.Mesh.VertexCount))
 		gl.BindVertexArray(0)
+
+		chunksRendered++
 	}
 }
 

@@ -238,3 +238,7 @@ func (p *Player) PlaceBlock(blockType world.BlockType) {
 		p.world.SetBlock(x, y, z, blockType)
 	}
 }
+
+func (p *Player) IsNoClip() bool {
+	return p.noClip
+}
