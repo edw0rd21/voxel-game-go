@@ -1,0 +1,186 @@
+package ui
+
+import (
+	"github.com/go-gl/gl/v4.1-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
+	"voxel-game/internal/world"
+)
+
+type Hotbar struct {
+	vao   uint32
+	vbo   uint32
+	
+	screenWidth  int
+	screenHeight int
+	
+	selectedSlot int
+	slotCount    int
+	slotSize     float32
+	padding      float32
+	
+	needsUpdate bool
+}
+
+func NewHotbar(screenWidth, screenHeight int) *Hotbar {
+	return &Hotbar{
+		screenWidth:  screenWidth,
+		screenHeight: screenHeight,
+		selectedSlot: 0, // Dirt by default
+		slotCount:    3, // 3 block types
+		slotSize:     50.0,
+		padding:      5.0,
+		needsUpdate:  true,
+	}
+}
+
+func (h *Hotbar) Init() error {
+	gl.GenVertexArrays(1, &h.vao)
+	gl.GenBuffers(1, &h.vbo)
+	
+	h.generateGeometry()
+	
+	return nil
+}
+
+func (h *Hotbar) generateGeometry() {
+	// Calculate total width and starting X position
+	totalWidth := float32(h.slotCount)*h.slotSize + float32(h.slotCount-1)*h.padding
+	startX := (float32(h.screenWidth) - totalWidth) / 2.0
+	bottomY := float32(h.screenHeight) - 80.0 // 80 pixels from bottom
+	
+	vertices := make([]float32, 0)
+	
+	// Draw each slot
+	for i := 0; i < h.slotCount; i++ {
+		x := startX + float32(i)*(h.slotSize+h.padding)
+		
+		// Determine color based on selection and block type
+		var color mgl32.Vec3
+		if i == h.selectedSlot {
+			color = mgl32.Vec3{1.0, 1.0, 1.0} // White border for selected
+		} else {
+			color = mgl32.Vec3{0.5, 0.5, 0.5} // Gray for unselected
+		}
+		
+		// Get block color for the fill
+		blockColor := getBlockColorForSlot(i)
+		
+		// Draw filled rectangle (block preview)
+		innerPadding := float32(5.0)
+		if i == h.selectedSlot {
+			innerPadding = 3.0 // Less padding for selected
+		}
+		
+		fillVertices := createFilledRect(
+			x+innerPadding, 
+			bottomY+innerPadding, 
+			h.slotSize-innerPadding*2, 
+			h.slotSize-innerPadding*2, 
+			blockColor,
+		)
+		vertices = append(vertices, fillVertices...)
+		
+		// Draw border (outline)
+		borderVertices := createRectOutline(x, bottomY, h.slotSize, h.slotSize, color)
+		vertices = append(vertices, borderVertices...)
+	}
+	
+	gl.BindVertexArray(h.vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, h.vbo)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.DYNAMIC_DRAW)
+	
+	// Position attribute (2D)
+	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+	gl.EnableVertexAttribArray(0)
+	
+	// Color attribute
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(2*4))
+	gl.EnableVertexAttribArray(1)
+	
+	gl.BindVertexArray(0)
+	
+	h.needsUpdate = false
+}
+
+func (h *Hotbar) Update(state interface{}) {
+	if selectedBlock, ok := state.(world.BlockType); ok {
+		newSlot := int(selectedBlock) - 1 // BlockDirt=1 -> slot 0
+		if newSlot >= 0 && newSlot < h.slotCount && newSlot != h.selectedSlot {
+			h.selectedSlot = newSlot
+			h.needsUpdate = true
+		}
+	}
+	
+	if screenSize, ok := state.(*ScreenSize); ok {
+		if screenSize.Width != h.screenWidth || screenSize.Height != h.screenHeight {
+			h.screenWidth = screenSize.Width
+			h.screenHeight = screenSize.Height
+			h.needsUpdate = true
+		}
+	}
+	
+	// Regenerate geometry if needed
+	if h.needsUpdate {
+		h.generateGeometry()
+	}
+}
+
+func (h *Hotbar) Draw(shaderProgram uint32, projection mgl32.Mat4) {
+	gl.BindVertexArray(h.vao)
+	// Draw filled rectangles (6 vertices per rect * 3 slots)
+	gl.DrawArrays(gl.TRIANGLES, 0, int32(h.slotCount*6))
+	// Draw borders (8 vertices per outline * 3 slots, starting after filled rects)
+	gl.LineWidth(2.0)
+	gl.DrawArrays(gl.LINES, int32(h.slotCount*6), int32(h.slotCount*8))
+	gl.BindVertexArray(0)
+}
+
+func (h *Hotbar) Cleanup() {
+	gl.DeleteVertexArrays(1, &h.vao)
+	gl.DeleteBuffers(1, &h.vbo)
+}
+
+// Helper function to create filled rectangle vertices
+func createFilledRect(x, y, width, height float32, color mgl32.Vec3) []float32 {
+	return []float32{
+		// Triangle 1
+		x, y, color[0], color[1], color[2],
+		x + width, y, color[0], color[1], color[2],
+		x + width, y + height, color[0], color[1], color[2],
+		// Triangle 2
+		x, y, color[0], color[1], color[2],
+		x + width, y + height, color[0], color[1], color[2],
+		x, y + height, color[0], color[1], color[2],
+	}
+}
+
+// Helper function to create rectangle outline vertices
+func createRectOutline(x, y, width, height float32, color mgl32.Vec3) []float32 {
+	return []float32{
+		// Top line
+		x, y, color[0], color[1], color[2],
+		x + width, y, color[0], color[1], color[2],
+		// Right line
+		x + width, y, color[0], color[1], color[2],
+		x + width, y + height, color[0], color[1], color[2],
+		// Bottom line
+		x + width, y + height, color[0], color[1], color[2],
+		x, y + height, color[0], color[1], color[2],
+		// Left line
+		x, y + height, color[0], color[1], color[2],
+		x, y, color[0], color[1], color[2],
+	}
+}
+
+func getBlockColorForSlot(slot int) mgl32.Vec3 {
+	switch slot {
+	case 0: // Dirt
+		return mgl32.Vec3{0.6, 0.4, 0.2}
+	case 1: // Grass
+		return mgl32.Vec3{0.2, 0.8, 0.2}
+	case 2: // Stone
+		return mgl32.Vec3{0.5, 0.5, 0.5}
+	default:
+		return mgl32.Vec3{1.0, 1.0, 1.0}
+	}
+}

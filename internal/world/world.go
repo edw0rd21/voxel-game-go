@@ -11,7 +11,7 @@ import (
 const (
 	ChunkSize      = 16
 	ChunkHeight    = 64
-	RenderDistance = 8
+	RenderDistance = 16
 )
 
 type BlockType uint8

@@ -20,6 +20,8 @@ var fragmentShaderSource string
 
 type Renderer struct {
 	shaderProgram uint32
+	crosshairVAO  uint32
+	crosshairVBO  uint32
 }
 
 func NewRenderer() (*Renderer, error) {

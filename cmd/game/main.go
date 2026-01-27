@@ -9,6 +9,7 @@ import (
 	"voxel-game/internal/input"
 	"voxel-game/internal/player"
 	"voxel-game/internal/render"
+	"voxel-game/internal/ui"
 	"voxel-game/internal/world"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
@@ -18,7 +19,7 @@ import (
 const (
 	windowWidth  = 1280
 	windowHeight = 720
-	windowTitle  = "Simple Voxel Game"
+	windowTitle  = "Voxel Game"
 )
 
 func init() {
@@ -48,7 +49,7 @@ func main() {
 	window.MakeContextCurrent()
 
 	// Control VSync
-	glfw.SwapInterval(0) // 1 = VSync on, 0 = VSync off
+	glfw.SwapInterval(1) // 1 = VSync on, 0 = VSync off
 
 	// Initialize OpenGL
 	if err := gl.Init(); err != nil {
@@ -65,22 +66,52 @@ func main() {
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	log.Println("OpenGL version:", version)
 
+	// Initialize camera
+	cam := camera.NewCamera(windowWidth, windowHeight)
+
 	// Initialize renderer
 	renderer, err := render.NewRenderer()
 	if err != nil {
 		log.Fatalln("failed to create renderer:", err)
 	}
 
-	wireframeMode := false
+	// Initialize UI renderer
+	uiRenderer, err := ui.NewUIRenderer(windowWidth, windowHeight)
+	if err != nil {
+		log.Fatalln("failed to create UI renderer:", err)
+	}
+	defer uiRenderer.Cleanup()
 
-	// Initialize camera
-	cam := camera.NewCamera(windowWidth, windowHeight)
+	// Add UI elements
+	crosshair := ui.NewCrosshair(windowWidth, windowHeight)
+	if err := uiRenderer.AddElement(crosshair); err != nil {
+		log.Fatalln("failed to add crosshair:", err)
+	}
+
+	hotbar := ui.NewHotbar(windowWidth, windowHeight)
+	if err := uiRenderer.AddElement(hotbar); err != nil {
+		log.Fatalln("failed to add hotbar:", err)
+	}
+
+	// Window resize callback
+	window.SetFramebufferSizeCallback(func(w *glfw.Window, width, height int) {
+		gl.Viewport(0, 0, int32(width), int32(height))
+		cam.SetSize(width, height)
+		uiRenderer.Resize(width, height)
+
+		// Update UI elements with new size
+		screenSize := &ui.ScreenSize{Width: width, Height: height}
+		crosshair.Update(screenSize)
+		hotbar.Update(screenSize)
+	})
 
 	// Initialize world
 	gameWorld := world.NewWorld()
 
 	// Initialize player
 	p := player.NewPlayer(cam, gameWorld)
+
+	wireframeMode := false
 
 	// Initialize input manager
 	inputMgr := input.NewInputManager(window, cam, p, &wireframeMode)
@@ -98,7 +129,10 @@ func main() {
 
 	// Chunk update throttling
 	lastChunkUpdate := glfw.GetTime()
-	chunkUpdateInterval := 1.0 // Update chunks every 0.5 seconds
+	chunkUpdateInterval := 0.5 // Update chunks every 0.5 seconds
+
+	// Track selected block for hotbar
+	lastSelectedBlock := world.BlockAir
 
 	// Game loop
 	for !window.ShouldClose() {
@@ -125,6 +159,14 @@ func main() {
 		// Update world chunks based on player position
 		if currentTime-lastChunkUpdate >= chunkUpdateInterval {
 			gameWorld.UpdateChunks(cam.Position[0], cam.Position[2])
+			lastChunkUpdate = currentTime
+		}
+
+		// Update hotbar if selected block changed
+		selectedBlock := inputMgr.GetSelectedBlock()
+		if selectedBlock != lastSelectedBlock {
+			hotbar.Update(selectedBlock)
+			lastSelectedBlock = selectedBlock
 		}
 
 		// Clear screen
@@ -132,6 +174,9 @@ func main() {
 
 		// Render world
 		renderer.RenderWorld(gameWorld, cam)
+
+		// Render UI
+		uiRenderer.Render()
 
 		// Swap buffers and poll events
 		window.SwapBuffers()

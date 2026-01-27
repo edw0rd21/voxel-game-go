@@ -30,7 +30,7 @@ func NewCamera(width, height int) *Camera {
 		WorldUp:          mgl32.Vec3{0, 1, 0},
 		Yaw:              -90.0,
 		Pitch:            0.0,
-		MovementSpeed:    10.0,
+		MovementSpeed:    5.0,
 		MouseSensitivity: 0.1,
 		Fov:              45.0,
 		width:            width,
