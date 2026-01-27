@@ -38,11 +38,13 @@ func NewUIRenderer(width, height int) (*UIRenderer, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("[UI] Vertex shader compiled successfully:", vertexShader)
 
 	fragmentShader, err := compileShader(uiFragmentShaderSource, gl.FRAGMENT_SHADER)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("[UI] Fragment shader compiled successfully:", fragmentShader)
 
 	// Link shader program
 	program := gl.CreateProgram()
@@ -59,6 +61,19 @@ func NewUIRenderer(width, height int) (*UIRenderer, error) {
 		log := strings.Repeat("\x00", int(logLength+1))
 		gl.GetProgramInfoLog(program, logLength, nil, gl.Str(log))
 		return nil, fmt.Errorf("failed to link UI shader program: %v", log)
+	}
+	fmt.Println("[UI] Shader program linked successfully:", program)
+
+	// DEBUG CODE
+	gl.ValidateProgram(program)
+	var validateStatus int32
+	gl.GetProgramiv(program, gl.VALIDATE_STATUS, &validateStatus)
+	if validateStatus == gl.FALSE {
+		var logLength int32
+		gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &logLength)
+		log := strings.Repeat("\x00", int(logLength+1))
+		gl.GetProgramInfoLog(program, logLength, nil, gl.Str(log))
+		fmt.Printf("Shader validation warning: %v\n", log)
 	}
 
 	gl.DeleteShader(vertexShader)
@@ -93,19 +108,55 @@ func (r *UIRenderer) Resize(width, height int) {
 }
 
 func (r *UIRenderer) Render() {
+	// Clear any pending errors from previous rendering
+	for gl.GetError() != gl.NO_ERROR {
+		// Drain error queue
+	}
+
 	// Disable depth test for UI overlay
 	gl.Disable(gl.DEPTH_TEST)
+	// Disable face culling for UI:
+	gl.Disable(gl.CULL_FACE)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+	// DEBUG Save current polygon mode
+	var polygonMode [2]int32
+	gl.GetIntegerv(gl.POLYGON_MODE, &polygonMode[0])
+
+	// DEBUG Force fill mode for UI
+	gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 
 	gl.UseProgram(r.shaderProgram)
+
+	// DEBUG CODE - Verify shader is active and check for errors
+	var currentProgram int32
+	gl.GetIntegerv(gl.CURRENT_PROGRAM, &currentProgram)
+	//fmt.Printf("[UIRenderer] Active shader program: %d\n", currentProgram)
+
+	if err := gl.GetError(); err != gl.NO_ERROR {
+		fmt.Printf("[UIRenderer] Error after UseProgram: %d\n", err)
+	}
 
 	// Set projection matrix
 	projectionLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("projection\x00"))
 	gl.UniformMatrix4fv(projectionLoc, 1, false, &r.projection[0])
 
+	// DEBUG CODE
+	if err := gl.GetError(); err != gl.NO_ERROR {
+		fmt.Printf("[UIRenderer] Error after setting projection: %d\n", err)
+	}
+
 	// Draw all elements in order (determines layering)
 	for _, element := range r.elements {
 		element.Draw(r.shaderProgram, r.projection)
 	}
+
+	// DEBUG Restore previous polygon mode
+	gl.PolygonMode(gl.FRONT_AND_BACK, uint32(polygonMode[0]))
+
+	// RE-ENABLE face culling:
+	gl.Enable(gl.CULL_FACE)
 
 	// Re-enable depth test
 	gl.Enable(gl.DEPTH_TEST)

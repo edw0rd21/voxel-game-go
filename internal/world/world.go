@@ -18,8 +18,8 @@ type BlockType uint8
 
 const (
 	BlockAir BlockType = iota
-	BlockGrass
 	BlockDirt
+	BlockGrass
 	BlockStone
 )
 

@@ -116,6 +116,13 @@ func main() {
 	// Initialize input manager
 	inputMgr := input.NewInputManager(window, cam, p, &wireframeMode)
 
+	// Debug
+	fmt.Printf("BlockAir = %d\n", world.BlockAir)
+	fmt.Printf("BlockDirt = %d\n", world.BlockDirt)
+	fmt.Printf("BlockGrass = %d\n", world.BlockGrass)
+	fmt.Printf("BlockStone = %d\n", world.BlockStone)
+	fmt.Printf("Initial selected block = %d\n", inputMgr.GetSelectedBlock())
+
 	// Capture cursor
 	window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 
