@@ -40,6 +40,8 @@ func NewHotbar(screenWidth, screenHeight int) *Hotbar {
 func (h *Hotbar) Init() error {
 	gl.GenVertexArrays(1, &h.vao)
 	gl.GenBuffers(1, &h.vbo)
+	checkGLError("Hotbar.Init after creating VAO/VBO")
+
 	h.generateGeometry()
 	return nil
 }
@@ -53,7 +55,9 @@ func (h *Hotbar) generateGeometry() {
 	fillVertices := make([]float32, 0)
 	borderVertices := make([]float32, 0)
 
-	// Draw each slot left-to-right
+	borderThickness := float32(2.0)
+
+	// Draw slots
 	for slotIndex := 0; slotIndex < h.slotCount; slotIndex++ {
 		i := slotIndex
 		x := startX + float32(i)*(h.slotSize+h.padding)
@@ -70,9 +74,9 @@ func (h *Hotbar) generateGeometry() {
 		blockColor := getBlockColorForSlot(i)
 
 		// Draw filled rectangle (block preview)
-		innerPadding := float32(0.0)
+		innerPadding := float32(5.0)
 		if i == h.selectedSlot {
-			innerPadding = 0.0 // Less padding for selected
+			innerPadding = 3.0 // Less padding for selected
 		}
 
 		fillVertices = append(fillVertices, createFilledRect(
@@ -82,10 +86,32 @@ func (h *Hotbar) generateGeometry() {
 			h.slotSize-innerPadding*2,
 			blockColor)...)
 
-		borderVertices = append(borderVertices, createRectOutline(
+		// Draw border as 4 thin rectangles
+		// Top border
+		borderVertices = append(borderVertices, createFilledRect(
 			x,
 			bottomY,
 			h.slotSize,
+			borderThickness,
+			borderColor)...)
+		// Bottom border
+		borderVertices = append(borderVertices, createFilledRect(
+			x,
+			bottomY+h.slotSize-borderThickness,
+			h.slotSize,
+			borderThickness,
+			borderColor)...)
+		// Left border
+		borderVertices = append(borderVertices, createFilledRect(
+			x, bottomY,
+			borderThickness,
+			h.slotSize,
+			borderColor)...)
+		// Right border
+		borderVertices = append(borderVertices, createFilledRect(
+			x+h.slotSize-borderThickness,
+			bottomY,
+			borderThickness,
 			h.slotSize,
 			borderColor)...)
 	}
@@ -109,6 +135,8 @@ func (h *Hotbar) generateGeometry() {
 	gl.EnableVertexAttribArray(1)
 
 	gl.BindVertexArray(0)
+
+	checkGLError("Hotbar.generateGeometry")
 
 	h.needsUpdate = false
 }
@@ -142,47 +170,16 @@ func (h *Hotbar) Draw(shaderProgram uint32, projection mgl32.Mat4) {
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(h.fillVertexCount))
 
 	// Draw border batch
-	gl.LineWidth(2.0)
-	gl.DrawArrays(gl.LINES, int32(h.fillVertexCount), int32(h.borderVertexCount))
+	gl.DrawArrays(gl.TRIANGLES, int32(h.fillVertexCount), int32(h.borderVertexCount))
 
 	gl.BindVertexArray(0)
+
+	checkGLError("Hotbar.Draw")
 }
 
 func (h *Hotbar) Cleanup() {
 	gl.DeleteVertexArrays(1, &h.vao)
 	gl.DeleteBuffers(1, &h.vbo)
-}
-
-// Helper function to create filled rectangle vertices
-func createFilledRect(x, y, width, height float32, color mgl32.Vec3) []float32 {
-	return []float32{
-		// Triangle 1
-		x, y, color[0], color[1], color[2],
-		x + width, y, color[0], color[1], color[2],
-		x + width, y + height, color[0], color[1], color[2],
-		// Triangle 2
-		x, y, color[0], color[1], color[2],
-		x + width, y + height, color[0], color[1], color[2],
-		x, y + height, color[0], color[1], color[2],
-	}
-}
-
-// Helper function to create rectangle outline vertices
-func createRectOutline(x, y, width, height float32, color mgl32.Vec3) []float32 {
-	return []float32{
-		// Top line
-		x, y, color[0], color[1], color[2],
-		x + width, y, color[0], color[1], color[2],
-		// Right line
-		x + width, y, color[0], color[1], color[2],
-		x + width, y + height, color[0], color[1], color[2],
-		// Bottom line
-		x + width, y + height, color[0], color[1], color[2],
-		x, y + height, color[0], color[1], color[2],
-		// Left line
-		x, y + height, color[0], color[1], color[2],
-		x, y, color[0], color[1], color[2],
-	}
 }
 
 func getBlockColorForSlot(slot int) mgl32.Vec3 {

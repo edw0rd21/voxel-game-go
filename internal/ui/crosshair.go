@@ -1,26 +1,28 @@
 package ui
 
 import (
-	"fmt"
-
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
 )
 
 type Crosshair struct {
-	vao   uint32
-	vbo   uint32
-	color mgl32.Vec3
-	size  float32
+	vao       uint32
+	vbo       uint32
+	color     mgl32.Vec3
+	size      float32
+	thickness float32
 
 	screenWidth  int
 	screenHeight int
+
+	vertexCount int
 }
 
 func NewCrosshair(screenWidth, screenHeight int) *Crosshair {
 	return &Crosshair{
 		color:        mgl32.Vec3{1.0, 1.0, 1.0}, // White
 		size:         10.0,
+		thickness:    2.0,
 		screenWidth:  screenWidth,
 		screenHeight: screenHeight,
 	}
@@ -31,7 +33,8 @@ func (c *Crosshair) Init() error {
 	gl.GenVertexArrays(1, &c.vao)
 	gl.GenBuffers(1, &c.vbo)
 
-	// Generate geometry
+	checkGLError("Crosshair.Init after creating VAO/VBO")
+
 	c.generateGeometry()
 
 	return nil
@@ -42,24 +45,26 @@ func (c *Crosshair) generateGeometry() {
 	centerX := float32(c.screenWidth) / 2.0
 	centerY := float32(c.screenHeight) / 2.0
 
-	// Create crosshair lines (+ shape)
-	vertices := []float32{
-		// Horizontal line
-		centerX - c.size, centerY, c.color[0], c.color[1], c.color[2],
-		centerX + c.size, centerY, c.color[0], c.color[1], c.color[2],
-		// Vertical line
-		centerX, centerY - c.size, c.color[0], c.color[1], c.color[2],
-		centerX, centerY + c.size, c.color[0], c.color[1], c.color[2],
-	}
+	vertices := make([]float32, 0)
 
-	// DEBUG
-	fmt.Printf("[Crosshair generateGeometry] Screen: %dx%d, Center: (%.1f, %.1f)\n",
-		c.screenWidth, c.screenHeight, centerX, centerY)
-	fmt.Println("[Crosshair] Vertices:")
-	for i := 0; i < len(vertices); i += 5 {
-		fmt.Printf("  [%d] pos:(%.1f, %.1f) color:(%.1f, %.1f, %.1f)\n",
-			i/5, vertices[i], vertices[i+1], vertices[i+2], vertices[i+3], vertices[i+4])
-	}
+	//Horizontal and vertical lines
+	vertices = append(vertices, createFilledRect(
+		centerX-c.size,
+		centerY-c.thickness/2,
+		c.size*2,
+		c.thickness,
+		c.color,
+	)...)
+
+	vertices = append(vertices, createFilledRect(
+		centerX-c.thickness/2,
+		centerY-c.size,
+		c.thickness,
+		c.size*2,
+		c.color,
+	)...)
+
+	c.vertexCount = len(vertices) / 5
 
 	gl.BindVertexArray(c.vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, c.vbo)
@@ -74,12 +79,11 @@ func (c *Crosshair) generateGeometry() {
 	gl.EnableVertexAttribArray(1)
 
 	gl.BindVertexArray(0)
+
+	checkGLError("Crosshair.generateGeometry")
 }
 
 func (c *Crosshair) Update(state interface{}) {
-	// Crosshair doesn't change based on state
-	// But we could update color, size, etc. here if needed
-
 	// If screen size changed, regenerate
 	if newSize, ok := state.(*ScreenSize); ok {
 		if newSize.Width != c.screenWidth || newSize.Height != c.screenHeight {
@@ -91,32 +95,11 @@ func (c *Crosshair) Update(state interface{}) {
 }
 
 func (c *Crosshair) Draw(shaderProgram uint32, projection mgl32.Mat4) {
-	// DEBUG
-	// var isProgram int32
-	// gl.GetProgramiv(shaderProgram, gl.LINK_STATUS, &isProgram)
-	// fmt.Printf("[Crosshair] Shader program %d link status: %d\n", shaderProgram, isProgram)
-
 	gl.BindVertexArray(c.vao)
-
-	// DEBUG
-	// var bufferSize int32
-	// gl.BindBuffer(gl.ARRAY_BUFFER, c.vbo)
-	// gl.GetBufferParameteriv(gl.ARRAY_BUFFER, gl.BUFFER_SIZE, &bufferSize)
-	// fmt.Printf("[Crosshair] VBO %d has %d bytes\n", c.vbo, bufferSize)
-
-	if err := gl.GetError(); err != gl.NO_ERROR {
-		fmt.Printf("[Crosshair] Error BEFORE DrawArrays: %d\n", err)
-	}
-
-	//gl.LineWidth(2.0)
-	gl.DrawArrays(gl.LINES, 0, 4)
-
-	// DEBUG
-	// if err := gl.GetError(); err != gl.NO_ERROR {
-	// 	fmt.Printf("[Crosshair] Error AFTER DrawArrays: %d\n", err)
-	// }
-
+	gl.DrawArrays(gl.TRIANGLES, 0, int32(c.vertexCount))
 	gl.BindVertexArray(0)
+
+	checkGLError("Crosshair.Draw")
 }
 
 func (c *Crosshair) Cleanup() {
@@ -131,5 +114,10 @@ func (c *Crosshair) SetColor(color mgl32.Vec3) {
 
 func (c *Crosshair) SetSize(size float32) {
 	c.size = size
+	c.generateGeometry()
+}
+
+func (c *Crosshair) SetThickness(thickness float32) {
+	c.thickness = thickness
 	c.generateGeometry()
 }

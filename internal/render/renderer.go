@@ -20,8 +20,8 @@ var fragmentShaderSource string
 
 type Renderer struct {
 	shaderProgram uint32
-	crosshairVAO  uint32
-	crosshairVBO  uint32
+	highlightVAO  uint32
+	highlightVBO  uint32
 }
 
 func NewRenderer() (*Renderer, error) {
@@ -56,9 +56,59 @@ func NewRenderer() (*Renderer, error) {
 	gl.DeleteShader(vertexShader)
 	gl.DeleteShader(fragmentShader)
 
-	return &Renderer{
+	renderer := &Renderer{
 		shaderProgram: program,
-	}, nil
+	}
+
+	renderer.initHighlightMesh()
+	return renderer, nil
+}
+
+func (r *Renderer) initHighlightMesh() {
+	vertices := []float32{
+		// Bottom face
+		0, 0, 0, 1, 0, 0,
+		1, 0, 0, 1, 0, 1,
+		1, 0, 1, 0, 0, 1,
+		0, 0, 1, 0, 0, 0,
+
+		// Top face
+		0, 1, 0, 1, 1, 0,
+		1, 1, 0, 1, 1, 1,
+		1, 1, 1, 0, 1, 1,
+		0, 1, 1, 0, 1, 0,
+
+		// Vertical edges
+		0, 0, 0, 0, 1, 0,
+		1, 0, 0, 1, 1, 0,
+		1, 0, 1, 1, 1, 1,
+		0, 0, 1, 0, 1, 1,
+	}
+
+	gl.GenVertexArrays(1, &r.highlightVAO)
+	gl.GenBuffers(1, &r.highlightVBO)
+
+	gl.BindVertexArray(r.highlightVAO)
+	gl.BindBuffer(gl.ARRAY_BUFFER, r.highlightVBO)
+
+	gl.BufferData(
+		gl.ARRAY_BUFFER,
+		len(vertices)*4,
+		gl.Ptr(vertices),
+		gl.STATIC_DRAW,
+	)
+
+	gl.EnableVertexAttribArray(0)
+	gl.VertexAttribPointer(
+		0,
+		3,
+		gl.FLOAT,
+		false,
+		3*4,
+		gl.PtrOffset(0),
+	)
+
+	gl.BindVertexArray(0)
 }
 
 func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
@@ -84,9 +134,9 @@ func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
 		}
 
 		// Frustum culling
-		if !cam.IsChunkVisible(chunk.X, chunk.Z, 16) {
-			continue
-		}
+		// if !cam.IsChunkVisible(chunk.X, chunk.Z, 16) {
+		// 	continue
+		// }
 
 		// Set model matrix (identity for now, chunk position handled in vertex data)
 		model := mgl32.Ident4()
@@ -99,6 +149,40 @@ func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
 
 		chunksRendered++
 	}
+}
+
+func (r *Renderer) DrawBlockHighlight(pos mgl32.Vec3, cam *camera.Camera, color mgl32.Vec3) {
+	gl.UseProgram(r.shaderProgram)
+
+	model := mgl32.Translate3D(pos.X(), pos.Y(), pos.Z()).
+		Mul4(mgl32.Scale3D(1.01, 1.01, 1.01))
+
+	view := cam.GetViewMatrix()
+	proj := cam.GetProjectionMatrix()
+
+	modelLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("model\x00"))
+	viewLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("view\x00"))
+	projLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("projection\x00"))
+	colorLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("uColor\x00"))
+
+	gl.UniformMatrix4fv(modelLoc, 1, false, &model[0])
+	gl.UniformMatrix4fv(viewLoc, 1, false, &view[0])
+	gl.UniformMatrix4fv(projLoc, 1, false, &proj[0])
+	gl.Uniform3fv(colorLoc, 1, &color[0])
+
+	gl.Disable(gl.DEPTH_TEST)
+	gl.DepthMask(false)
+
+	gl.Disable(gl.CULL_FACE)
+	gl.LineWidth(2)
+
+	gl.BindVertexArray(r.highlightVAO)
+	gl.DrawArrays(gl.LINES, 0, 24)
+	gl.BindVertexArray(0)
+
+	gl.DepthMask(true)
+	gl.Enable(gl.DEPTH_TEST)
+	gl.Enable(gl.CULL_FACE)
 }
 
 func compileShader(source string, shaderType uint32) (uint32, error) {

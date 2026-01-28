@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 const (
@@ -179,8 +180,18 @@ func main() {
 		// Clear screen
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
+		target := p.TargetBlock()
 		// Render world
 		renderer.RenderWorld(gameWorld, cam)
+
+		// Render block highlight (if player is looking at a block)
+		if target.Hit {
+			renderer.DrawBlockHighlight(
+				target.Pos,
+				cam,
+				mgl32.Vec3{1.0, 1.0, 1.0},
+			)
+		}
 
 		// Render UI
 		uiRenderer.Render()

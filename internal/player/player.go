@@ -9,6 +9,12 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
+type TargetBlock struct {
+	Hit  bool
+	Pos  mgl32.Vec3
+	Face int
+}
+
 type Player struct {
 	camera   *camera.Camera
 	world    *world.World
@@ -18,6 +24,8 @@ type Player struct {
 	width    float32
 	height   float32
 	noClip   bool
+
+	target TargetBlock
 }
 
 func NewPlayer(cam *camera.Camera, w *world.World) *Player {
@@ -50,6 +58,25 @@ func (p *Player) Update(deltaTime float32) {
 
 	// Damping
 	p.velocity = p.velocity.Mul(0.8)
+
+	p.updateTarget()
+}
+
+func (p *Player) updateTarget() {
+	hit, x, y, z, face := p.Raycast(5.0)
+	if hit {
+		p.target = TargetBlock{
+			Hit:  true,
+			Pos:  mgl32.Vec3{float32(x), float32(y), float32(z)},
+			Face: face,
+		}
+	} else {
+		p.target = TargetBlock{}
+	}
+}
+
+func (p *Player) TargetBlock() TargetBlock {
+	return p.target
 }
 
 func (p *Player) Move(direction mgl32.Vec3, speed float32) {
@@ -204,39 +231,60 @@ func (p *Player) Raycast(maxDistance float32) (hit bool, x, y, z int, face int) 
 }
 
 func (p *Player) BreakBlock() {
-	if hit, x, y, z, _ := p.Raycast(5.0); hit {
-		p.world.SetBlock(x, y, z, world.BlockAir)
+	if !p.target.Hit {
+		return
 	}
+
+	pos := p.target.Pos
+	p.world.SetBlock(
+		int(pos.X()),
+		int(pos.Y()),
+		int(pos.Z()),
+		world.BlockAir,
+	)
 }
 
 func (p *Player) PlaceBlock(blockType world.BlockType) {
-	if hit, x, y, z, face := p.Raycast(5.0); hit {
-		// Place block on the face that was hit
-		switch face {
-		case 0: // +Z
-			z++
-		case 1: // -Z
-			z--
-		case 2: // +X
-			x++
-		case 3: // -X
-			x--
-		case 4: // +Y
-			y++
-		case 5: // -Y
-			y--
-		}
-
-		// Don't place block where player is standing
-		playerMinY := int(math.Floor(float64(p.camera.Position[1])))
-		playerMaxY := int(math.Floor(float64(p.camera.Position[1] + p.height)))
-
-		if y >= playerMinY && y <= playerMaxY {
-			return
-		}
-
-		p.world.SetBlock(x, y, z, blockType)
+	if !p.target.Hit {
+		return
 	}
+
+	x := int(p.target.Pos.X())
+	y := int(p.target.Pos.Y())
+	z := int(p.target.Pos.Z())
+
+	switch p.target.Face {
+	case 0:
+		z++
+	case 1:
+		z--
+	case 2:
+		x++
+	case 3:
+		x--
+	case 4:
+		y++
+	case 5:
+		y--
+	}
+
+	if p.collidesWithPlayer(float32(x), float32(y), float32(z)) {
+		return
+	}
+
+	p.world.SetBlock(x, y, z, blockType)
+
+}
+
+func (p *Player) collidesWithPlayer(x, y, z float32) bool {
+	px := p.camera.Position.X()
+	py := p.camera.Position.Y()
+	pz := p.camera.Position.Z()
+
+	return mgl32.Abs(px-x) < p.width &&
+		py < y+p.height &&
+		py+p.height > y &&
+		mgl32.Abs(pz-z) < p.width
 }
 
 func (p *Player) IsNoClip() bool {
