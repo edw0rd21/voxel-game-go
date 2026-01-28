@@ -72,7 +72,7 @@ func (im *InputManager) Update(deltaTime float32) {
 
 	if moveDir.Len() > 0 {
 		moveDir = moveDir.Normalize()
-		im.player.Move(moveDir, im.camera.MovementSpeed)
+		im.player.Move(moveDir)
 	}
 
 	// Jump

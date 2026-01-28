@@ -22,6 +22,8 @@ type Camera struct {
 
 	width  int
 	height int
+
+	frustum [6]mgl32.Vec4
 }
 
 func NewCamera(width, height int) *Camera {
@@ -30,7 +32,7 @@ func NewCamera(width, height int) *Camera {
 		WorldUp:          mgl32.Vec3{0, 1, 0},
 		Yaw:              -90.0,
 		Pitch:            0.0,
-		MovementSpeed:    5.0,
+		MovementSpeed:    15.0,
 		MouseSensitivity: 0.1,
 		Fov:              45.0,
 		width:            width,
@@ -83,6 +85,9 @@ func (c *Camera) updateCameraVectors() {
 	// Recalculate Right and Up vectors
 	c.Right = c.Front.Cross(c.WorldUp).Normalize()
 	c.Up = c.Right.Cross(c.Front).Normalize()
+
+	// Update Frustum Planes whenever camera moves
+	c.updateFrustum()
 }
 
 func (c *Camera) SetSize(width, height int) {
@@ -90,26 +95,104 @@ func (c *Camera) SetSize(width, height int) {
 	c.height = height
 }
 
-func (c *Camera) IsChunkVisible(chunkX, chunkZ int, chunkSize int) bool {
-	// Simple distance-based culling for now
-	// Calculate chunk center in world coordinates
-	chunkCenterX := float32(chunkX*chunkSize) + float32(chunkSize)/2
-	chunkCenterZ := float32(chunkZ*chunkSize) + float32(chunkSize)/2
+// Extract the 6 planes of the view frustum
+func (c *Camera) updateFrustum() {
+	proj := c.GetProjectionMatrix()
+	view := c.GetViewMatrix()
+	clip := proj.Mul4(view)
 
-	// Vector from camera to chunk center
-	toChunk := mgl32.Vec3{
-		chunkCenterX - c.Position[0],
-		0,
-		chunkCenterZ - c.Position[2],
+	// Left
+	c.frustum[0] = mgl32.Vec4{
+		clip[3] + clip[0],
+		clip[7] + clip[4],
+		clip[11] + clip[8],
+		clip[15] + clip[12],
+	}
+	// Right
+	c.frustum[1] = mgl32.Vec4{
+		clip[3] - clip[0],
+		clip[7] - clip[4],
+		clip[11] - clip[8],
+		clip[15] - clip[12],
+	}
+	// Bottom
+	c.frustum[2] = mgl32.Vec4{
+		clip[3] + clip[1],
+		clip[7] + clip[5],
+		clip[11] + clip[9],
+		clip[15] + clip[13],
+	}
+	// Top
+	c.frustum[3] = mgl32.Vec4{
+		clip[3] - clip[1],
+		clip[7] - clip[5],
+		clip[11] - clip[9],
+		clip[15] - clip[13],
+	}
+	// Near
+	c.frustum[4] = mgl32.Vec4{
+		clip[3] + clip[2],
+		clip[7] + clip[6],
+		clip[11] + clip[10],
+		clip[15] + clip[14],
+	}
+	// Far
+	c.frustum[5] = mgl32.Vec4{
+		clip[3] - clip[2],
+		clip[7] - clip[6],
+		clip[11] - clip[10],
+		clip[15] - clip[14],
 	}
 
-	// If chunk is behind camera, don't render
-	// Dot product with camera front (ignoring Y)
-	cameraFront2D := mgl32.Vec3{c.Front[0], 0, c.Front[2]}.Normalize()
-	toChunk = toChunk.Normalize()
+	// Normalize planes
+	for i := 0; i < 6; i++ {
+		length := float32(math.Sqrt(float64(
+			c.frustum[i][0]*c.frustum[i][0] +
+				c.frustum[i][1]*c.frustum[i][1] +
+				c.frustum[i][2]*c.frustum[i][2])))
+		c.frustum[i] = c.frustum[i].Mul(1.0 / length)
+	}
+}
 
-	dot := toChunk.Dot(cameraFront2D)
+func (c *Camera) IsChunkVisible(chunkX, chunkZ int, chunkSize int) bool {
+	// Chunk AABB (Axis Aligned Bounding Box)
+	minX := float32(chunkX * chunkSize)
+	minY := float32(0)
+	minZ := float32(chunkZ * chunkSize)
 
-	// If dot < -0.2, chunk is behind camera (with some margin)
-	return dot > -0.2
+	maxX := minX + float32(chunkSize)
+	maxY := float32(256) // Height limit
+	maxZ := minZ + float32(chunkSize)
+
+	// Check box against all 6 planes
+	for i := 0; i < 6; i++ {
+		// If the box is completely behind any plane, it's invisible
+		if c.frustum[i][0]*minX+c.frustum[i][1]*minY+c.frustum[i][2]*minZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*maxX+c.frustum[i][1]*minY+c.frustum[i][2]*minZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*minX+c.frustum[i][1]*maxY+c.frustum[i][2]*minZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*maxX+c.frustum[i][1]*maxY+c.frustum[i][2]*minZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*minX+c.frustum[i][1]*minY+c.frustum[i][2]*maxZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*maxX+c.frustum[i][1]*minY+c.frustum[i][2]*maxZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*minX+c.frustum[i][1]*maxY+c.frustum[i][2]*maxZ+c.frustum[i][3] > 0 {
+			continue
+		}
+		if c.frustum[i][0]*maxX+c.frustum[i][1]*maxY+c.frustum[i][2]*maxZ+c.frustum[i][3] > 0 {
+			continue
+		}
+
+		return false
+	}
+	return true
 }

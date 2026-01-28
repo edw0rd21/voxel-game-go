@@ -95,9 +95,9 @@ func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
 		}
 
 		// Frustum culling
-		// if !cam.IsChunkVisible(chunk.X, chunk.Z, 16) {
-		// 	continue
-		// }
+		if !cam.IsChunkVisible(chunk.X, chunk.Z, world.ChunkSize) {
+			continue
+		}
 
 		// Set model matrix (identity for now, chunk position handled in vertex data)
 		model := mgl32.Ident4()

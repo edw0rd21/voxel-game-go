@@ -18,6 +18,7 @@ type TargetBlock struct {
 type Player struct {
 	camera   *camera.Camera
 	world    *world.World
+	speed    float32
 	velocity mgl32.Vec3
 
 	grounded bool
@@ -34,6 +35,7 @@ func NewPlayer(cam *camera.Camera, w *world.World) *Player {
 		world:  w,
 		width:  0.6,
 		height: 1.8,
+		speed:  1.2,
 	}
 }
 
@@ -79,8 +81,8 @@ func (p *Player) TargetBlock() TargetBlock {
 	return p.target
 }
 
-func (p *Player) Move(direction mgl32.Vec3, speed float32) {
-	p.velocity = p.velocity.Add(direction.Mul(speed))
+func (p *Player) Move(direction mgl32.Vec3) {
+	p.velocity = p.velocity.Add(direction.Mul(p.speed))
 }
 
 func (p *Player) Jump() {
