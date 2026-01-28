@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
-	"github.com/go-gl/mathgl/mgl32"
 	"github.com/ojrac/opensimplex-go"
 )
 
@@ -120,13 +119,58 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 }
 
 func (c *Chunk) generateMesh(w *World) {
-	var vertices []float32
+	vertices := make([]float32, 0, 4096)
+
+	// Cache neighbors to avoid map lookups in the inner loop
+	nLeft := w.chunks[[2]int{c.X - 1, c.Z}]
+	nRight := w.chunks[[2]int{c.X + 1, c.Z}]
+	nBack := w.chunks[[2]int{c.X, c.Z - 1}]
+	nFront := w.chunks[[2]int{c.X, c.Z + 1}]
+
+	// Helper closure to check transparency quickly
+	isTransparent := func(x, y, z int) bool {
+		if y < 0 || y >= ChunkHeight {
+			return true
+		}
+
+		// Internal check (Fastest)
+		if x >= 0 && x < ChunkSize && z >= 0 && z < ChunkSize {
+			return c.Blocks[x][y][z].Type == BlockAir
+		}
+
+		// Neighbor checks (Fast-ish, using cached pointers)
+		if x < 0 {
+			if nLeft == nil {
+				return true
+			}
+			return nLeft.Blocks[ChunkSize-1][y][z].Type == BlockAir
+		}
+		if x >= ChunkSize {
+			if nRight == nil {
+				return true
+			}
+			return nRight.Blocks[0][y][z].Type == BlockAir
+		}
+		if z < 0 {
+			if nBack == nil {
+				return true
+			}
+			return nBack.Blocks[x][y][ChunkSize-1].Type == BlockAir
+		}
+		if z >= ChunkSize {
+			if nFront == nil {
+				return true
+			}
+			return nFront.Blocks[x][y][0].Type == BlockAir
+		}
+		return true
+	}
 
 	for x := 0; x < ChunkSize; x++ {
 		for y := 0; y < ChunkHeight; y++ {
 			for z := 0; z < ChunkSize; z++ {
-				block := c.Blocks[x][y][z]
-				if block.Type == BlockAir {
+				blockType := c.Blocks[x][y][z].Type
+				if blockType == BlockAir {
 					continue
 				}
 
@@ -134,32 +178,33 @@ func (c *Chunk) generateMesh(w *World) {
 				worldY := float32(y)
 				worldZ := float32(c.Z*ChunkSize + z)
 
-				color := getBlockColor(block.Type)
+				// Get base color
+				r, g, b := getBlockColorRGB(blockType)
 
-				// Check each face and add if exposed
+				// INLINED FACE GENERATION
 				// Front face (+Z)
-				if c.isTransparent(w, x, y, z+1) {
-					vertices = append(vertices, createFace(worldX, worldY, worldZ, 0, color)...)
+				if isTransparent(x, y, z+1) {
+					addFace(&vertices, worldX, worldY, worldZ, 0, r, g, b)
 				}
 				// Back face (-Z)
-				if c.isTransparent(w, x, y, z-1) {
-					vertices = append(vertices, createFace(worldX, worldY, worldZ, 1, color)...)
+				if isTransparent(x, y, z-1) {
+					addFace(&vertices, worldX, worldY, worldZ, 1, r, g, b)
 				}
 				// Right face (+X)
-				if c.isTransparent(w, x+1, y, z) {
-					vertices = append(vertices, createFace(worldX, worldY, worldZ, 2, color)...)
+				if isTransparent(x+1, y, z) {
+					addFace(&vertices, worldX, worldY, worldZ, 2, r, g, b)
 				}
 				// Left face (-X)
-				if c.isTransparent(w, x-1, y, z) {
-					vertices = append(vertices, createFace(worldX, worldY, worldZ, 3, color)...)
+				if isTransparent(x-1, y, z) {
+					addFace(&vertices, worldX, worldY, worldZ, 3, r, g, b)
 				}
 				// Top face (+Y)
-				if c.isTransparent(w, x, y+1, z) {
-					vertices = append(vertices, createFace(worldX, worldY, worldZ, 4, color)...)
+				if isTransparent(x, y+1, z) {
+					addFace(&vertices, worldX, worldY, worldZ, 4, r, g, b)
 				}
 				// Bottom face (-Y)
-				if c.isTransparent(w, x, y-1, z) {
-					vertices = append(vertices, createFace(worldX, worldY, worldZ, 5, color)...)
+				if isTransparent(x, y-1, z) {
+					addFace(&vertices, worldX, worldY, worldZ, 5, r, g, b)
 				}
 			}
 		}
@@ -170,12 +215,14 @@ func (c *Chunk) generateMesh(w *World) {
 	}
 
 	// Create mesh
-	var vao, vbo uint32
-	gl.GenVertexArrays(1, &vao)
-	gl.GenBuffers(1, &vbo)
+	if c.Mesh == nil {
+		c.Mesh = &ChunkMesh{}
+		gl.GenVertexArrays(1, &c.Mesh.VAO)
+		gl.GenBuffers(1, &c.Mesh.VBO)
+	}
 
-	gl.BindVertexArray(vao)
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+	gl.BindVertexArray(c.Mesh.VAO)
+	gl.BindBuffer(gl.ARRAY_BUFFER, c.Mesh.VBO)
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
 
 	// Position attribute
@@ -187,134 +234,100 @@ func (c *Chunk) generateMesh(w *World) {
 	gl.EnableVertexAttribArray(1)
 
 	gl.BindVertexArray(0)
-
-	c.Mesh = &ChunkMesh{
-		VAO:         vao,
-		VBO:         vbo,
-		VertexCount: len(vertices) / 6,
-	}
+	c.Mesh.VertexCount = len(vertices) / 6
 }
 
-func (c *Chunk) isTransparent(w *World, x, y, z int) bool {
-	// Check bounds
-	if y < 0 || y >= ChunkHeight {
-		return true
-	}
-
-	// If within this chunk
-	if x >= 0 && x < ChunkSize && z >= 0 && z < ChunkSize {
-		return c.Blocks[x][y][z].Type == BlockAir
-	}
-
-	// Check neighboring chunk
-	chunkX := c.X
-	chunkZ := c.Z
-	localX := x
-	localZ := z
-
-	if x < 0 {
-		chunkX--
-		localX = ChunkSize - 1
-	} else if x >= ChunkSize {
-		chunkX++
-		localX = 0
-	}
-
-	if z < 0 {
-		chunkZ--
-		localZ = ChunkSize - 1
-	} else if z >= ChunkSize {
-		chunkZ++
-		localZ = 0
-	}
-
-	neighbor, exists := w.chunks[[2]int{chunkX, chunkZ}]
-	if !exists {
-		return true
-	}
-
-	return neighbor.Blocks[localX][y][localZ].Type == BlockAir
-}
-
-func createFace(x, y, z float32, face int, color mgl32.Vec3) []float32 {
-	// Each face is 2 triangles = 6 vertices
-	// Each vertex is 6 floats: 3 for position, 3 for color
-	vertices := make([]float32, 36)
-
-	var positions [6][3]float32
-
-	switch face {
-	case 0: // Front (+Z)
-		positions = [6][3]float32{
-			{x, y, z + 1}, {x + 1, y, z + 1}, {x + 1, y + 1, z + 1},
-			{x, y, z + 1}, {x + 1, y + 1, z + 1}, {x, y + 1, z + 1},
-		}
-	case 1: // Back (-Z)
-		positions = [6][3]float32{
-			{x + 1, y, z}, {x, y, z}, {x, y + 1, z},
-			{x + 1, y, z}, {x, y + 1, z}, {x + 1, y + 1, z},
-		}
-	case 2: // Right (+X)
-		positions = [6][3]float32{
-			{x + 1, y, z + 1}, {x + 1, y, z}, {x + 1, y + 1, z},
-			{x + 1, y, z + 1}, {x + 1, y + 1, z}, {x + 1, y + 1, z + 1},
-		}
-	case 3: // Left (-X)
-		positions = [6][3]float32{
-			{x, y, z}, {x, y, z + 1}, {x, y + 1, z + 1},
-			{x, y, z}, {x, y + 1, z + 1}, {x, y + 1, z},
-		}
-	case 4: // Top (+Y)
-		positions = [6][3]float32{
-			{x, y + 1, z + 1}, {x + 1, y + 1, z + 1}, {x + 1, y + 1, z},
-			{x, y + 1, z + 1}, {x + 1, y + 1, z}, {x, y + 1, z},
-		}
-	case 5: // Bottom (-Y)
-		positions = [6][3]float32{
-			{x, y, z}, {x + 1, y, z}, {x + 1, y, z + 1},
-			{x, y, z}, {x + 1, y, z + 1}, {x, y, z + 1},
-		}
-	}
-
-	// Add slight shading based on face direction
-	shadingFactor := float32(1.0)
-	switch face {
-	case 0: // Front (+Z)
-		shadingFactor = 0.85 // CHANGE from 1.0
-	case 1: // Back (-Z)
-		shadingFactor = 0.75 // CHANGE from 0.8
-	case 2, 3: // Sides (X)
-		shadingFactor = 0.80 // CHANGE from 0.9
-	case 4: // Top (+Y)
-		shadingFactor = 1.0 // Keep brightest
-	case 5: // Bottom (-Y)
-		shadingFactor = 0.6 // CHANGE from 0.7
-	}
-
-	shadedColor := color.Mul(shadingFactor)
-
-	for i := 0; i < 6; i++ {
-		vertices[i*6+0] = positions[i][0]
-		vertices[i*6+1] = positions[i][1]
-		vertices[i*6+2] = positions[i][2]
-		vertices[i*6+3] = shadedColor[0]
-		vertices[i*6+4] = shadedColor[1]
-		vertices[i*6+5] = shadedColor[2]
-	}
-
-	return vertices
-}
-
-func getBlockColor(blockType BlockType) mgl32.Vec3 {
+// Return floats directly to avoid Vec3 allocation
+func getBlockColorRGB(blockType BlockType) (float32, float32, float32) {
 	switch blockType {
 	case BlockGrass:
-		return mgl32.Vec3{0.2, 0.8, 0.2} // Green
+		return 0.2, 0.8, 0.2
 	case BlockDirt:
-		return mgl32.Vec3{0.6, 0.4, 0.2} // Brown
+		return 0.6, 0.4, 0.2
 	case BlockStone:
-		return mgl32.Vec3{0.5, 0.5, 0.5} // Gray
+		return 0.5, 0.5, 0.5
 	default:
-		return mgl32.Vec3{1, 1, 1} // White
+		return 1.0, 1.0, 1.0
+	}
+}
+
+// Helper to append vertices directly
+func addFace(verts *[]float32, x, y, z float32, face int, r, g, b float32) {
+	// Apply shading
+	shade := float32(1.0)
+	switch face {
+	case 0:
+		shade = 0.85 // Front
+	case 1:
+		shade = 0.75 // Back
+	case 2, 3:
+		shade = 0.80 // Sides
+	case 4:
+		shade = 1.0 // Top
+	case 5:
+		shade = 0.6 // Bottom
+	}
+
+	r *= shade
+	g *= shade
+	b *= shade
+
+	// Append 6 vertices (2 triangles)
+	// Front (+Z)
+	if face == 0 {
+		*verts = append(*verts,
+			x, y, z+1, r, g, b,
+			x+1, y, z+1, r, g, b,
+			x+1, y+1, z+1, r, g, b,
+			x, y, z+1, r, g, b,
+			x+1, y+1, z+1, r, g, b,
+			x, y+1, z+1, r, g, b,
+		)
+	} else if face == 1 { // Back (-Z)
+		*verts = append(*verts,
+			x+1, y, z, r, g, b,
+			x, y, z, r, g, b,
+			x, y+1, z, r, g, b,
+			x+1, y, z, r, g, b,
+			x, y+1, z, r, g, b,
+			x+1, y+1, z, r, g, b,
+		)
+	} else if face == 2 { // Right (+X)
+		*verts = append(*verts,
+			x+1, y, z+1, r, g, b,
+			x+1, y, z, r, g, b,
+			x+1, y+1, z, r, g, b,
+			x+1, y, z+1, r, g, b,
+			x+1, y+1, z, r, g, b,
+			x+1, y+1, z+1, r, g, b,
+		)
+	} else if face == 3 { // Left (-X)
+		*verts = append(*verts,
+			x, y, z, r, g, b,
+			x, y, z+1, r, g, b,
+			x, y+1, z+1, r, g, b,
+			x, y, z, r, g, b,
+			x, y+1, z+1, r, g, b,
+			x, y+1, z, r, g, b,
+		)
+	} else if face == 4 { // Top (+Y)
+		*verts = append(*verts,
+			x, y+1, z+1, r, g, b,
+			x+1, y+1, z+1, r, g, b,
+			x+1, y+1, z, r, g, b,
+			x, y+1, z+1, r, g, b,
+			x+1, y+1, z, r, g, b,
+			x, y+1, z, r, g, b,
+		)
+	} else if face == 5 { // Bottom (-Y)
+		*verts = append(*verts,
+			x, y, z, r, g, b,
+			x+1, y, z, r, g, b,
+			x+1, y, z+1, r, g, b,
+			x, y, z, r, g, b,
+			x+1, y, z+1, r, g, b,
+			x, y, z+1, r, g, b,
+		)
 	}
 }
 
