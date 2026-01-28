@@ -163,8 +163,10 @@ func main() {
 		// Handle input
 		inputMgr.Update(deltaTime)
 
-		// Update player
-		p.Update(deltaTime)
+		// Update player - ONLY update player physics if NOT in debug mode
+		if !inputMgr.IsDebugMode() {
+			p.Update(deltaTime)
+		}
 
 		// Update world chunks based on player position
 		if currentTime-lastChunkUpdate >= chunkUpdateInterval {

@@ -24,7 +24,6 @@ type Player struct {
 	grounded bool
 	width    float32
 	height   float32
-	noClip   bool
 
 	target TargetBlock
 }
@@ -41,7 +40,7 @@ func NewPlayer(cam *camera.Camera, w *world.World) *Player {
 
 func (p *Player) Update(deltaTime float32) {
 	// Apply gravity
-	if !p.grounded && !p.noClip {
+	if !p.grounded {
 		p.velocity[1] -= 20.0 * deltaTime
 	}
 
@@ -54,9 +53,7 @@ func (p *Player) Update(deltaTime float32) {
 	p.camera.Position = newPos
 
 	// Check if grounded
-	if !p.noClip {
-		p.grounded = p.isGrounded()
-	}
+	p.grounded = p.isGrounded()
 
 	// Damping
 	p.velocity = p.velocity.Mul(0.8)
@@ -88,13 +85,6 @@ func (p *Player) Move(direction mgl32.Vec3) {
 func (p *Player) Jump() {
 	if p.grounded {
 		p.velocity[1] = 8.0
-	}
-}
-
-func (p *Player) NoClip() {
-	p.noClip = !p.noClip
-	if p.noClip {
-		p.velocity = mgl32.Vec3{0, 0, 0} // Stop all movement when enabling
 	}
 }
 
@@ -287,8 +277,4 @@ func (p *Player) collidesWithPlayer(x, y, z float32) bool {
 		py < y+p.height &&
 		py+p.height > y &&
 		mgl32.Abs(pz-z) < p.width
-}
-
-func (p *Player) IsNoClip() bool {
-	return p.noClip
 }
