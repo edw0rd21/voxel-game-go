@@ -13,77 +13,187 @@ import (
 )
 
 //go:embed shaders/vertex.glsl
-var vertexShaderSource string
+var chunkVertexSource string
 
 //go:embed shaders/fragment.glsl
-var fragmentShaderSource string
+var chunkFragmentSource string
+
+//go:embed shaders/flat_vertex.glsl
+var flatVertexSource string
+
+//go:embed shaders/flat_fragment.glsl
+var flatFragmentSource string
 
 type Renderer struct {
-	shaderProgram uint32
-	highlightVAO  uint32
-	highlightVBO  uint32
+	// Program 1: The World (Chunks)
+	chunkProgram       uint32
+	chunkUniModel      int32
+	chunkUniView       int32
+	chunkUniProjection int32
+
+	// Program 2: Flat Geometry (Highlights)
+	flatProgram       uint32
+	flatUniModel      int32
+	flatUniView       int32
+	flatUniProjection int32
+	flatUniColor      int32
+
+	highlightVAO uint32
+	highlightVBO uint32
 }
 
 func NewRenderer() (*Renderer, error) {
-	// Compile shaders
-	vertexShader, err := compileShader(vertexShaderSource, gl.VERTEX_SHADER)
+	renderer := &Renderer{}
+
+	// Compile Chunk Shader
+	var err error
+	renderer.chunkProgram, err = createProgram(chunkVertexSource, chunkFragmentSource)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create chunk shader: %v", err)
 	}
 
-	fragmentShader, err := compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER)
+	// Compile Flat Shader
+	renderer.flatProgram, err = createProgram(flatVertexSource, flatFragmentSource)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create flat shader: %v", err)
 	}
 
-	// Link shader program
-	program := gl.CreateProgram()
-	gl.AttachShader(program, vertexShader)
-	gl.AttachShader(program, fragmentShader)
-	gl.LinkProgram(program)
+	// Cache Uniforms for Chunk Program
+	gl.UseProgram(renderer.chunkProgram)
+	renderer.chunkUniModel = gl.GetUniformLocation(renderer.chunkProgram, gl.Str("model\x00"))
+	renderer.chunkUniView = gl.GetUniformLocation(renderer.chunkProgram, gl.Str("view\x00"))
+	renderer.chunkUniProjection = gl.GetUniformLocation(renderer.chunkProgram, gl.Str("projection\x00"))
 
-	// Check linking status
-	var status int32
-	gl.GetProgramiv(program, gl.LINK_STATUS, &status)
-	if status == gl.FALSE {
-		var logLength int32
-		gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &logLength)
-		log := strings.Repeat("\x00", int(logLength+1))
-		gl.GetProgramInfoLog(program, logLength, nil, gl.Str(log))
-		return nil, fmt.Errorf("failed to link program: %v", log)
-	}
+	// Cache Uniforms for Flat Program
+	gl.UseProgram(renderer.flatProgram)
+	renderer.flatUniModel = gl.GetUniformLocation(renderer.flatProgram, gl.Str("model\x00"))
+	renderer.flatUniView = gl.GetUniformLocation(renderer.flatProgram, gl.Str("view\x00"))
+	renderer.flatUniProjection = gl.GetUniformLocation(renderer.flatProgram, gl.Str("projection\x00"))
+	renderer.flatUniColor = gl.GetUniformLocation(renderer.flatProgram, gl.Str("uColor\x00"))
 
-	gl.DeleteShader(vertexShader)
-	gl.DeleteShader(fragmentShader)
-
-	renderer := &Renderer{
-		shaderProgram: program,
-	}
+	gl.UseProgram(0)
 
 	renderer.initHighlightMesh()
 	return renderer, nil
 }
 
-func (r *Renderer) initHighlightMesh() {
-	vertices := []float32{
-		// Bottom face
-		0, 0, 0, 1, 0, 0,
-		1, 0, 0, 1, 0, 1,
-		1, 0, 1, 0, 0, 1,
-		0, 0, 1, 0, 0, 0,
+func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
+	gl.UseProgram(r.chunkProgram)
 
-		// Top face
-		0, 1, 0, 1, 1, 0,
-		1, 1, 0, 1, 1, 1,
-		1, 1, 1, 0, 1, 1,
-		0, 1, 1, 0, 1, 0,
+	// Set view and projection matrices
+	view := cam.GetViewMatrix()
+	projection := cam.GetProjectionMatrix()
 
-		// Vertical edges
-		0, 0, 0, 0, 1, 0,
-		1, 0, 0, 1, 1, 0,
-		1, 0, 1, 1, 1, 1,
-		0, 0, 1, 0, 1, 1,
+	gl.UniformMatrix4fv(r.chunkUniView, 1, false, &view[0])
+	gl.UniformMatrix4fv(r.chunkUniProjection, 1, false, &projection[0])
+
+	// Render each chunk
+	//chunksRendered := 0
+	for _, chunk := range w.GetChunks() {
+		if chunk.Mesh == nil || chunk.Mesh.VertexCount == 0 {
+			continue
+		}
+
+		// Frustum culling
+		// if !cam.IsChunkVisible(chunk.X, chunk.Z, 16) {
+		// 	continue
+		// }
+
+		// Set model matrix (identity for now, chunk position handled in vertex data)
+		model := mgl32.Ident4()
+		gl.UniformMatrix4fv(r.chunkUniModel, 1, false, &model[0])
+
+		// Bind and draw
+		gl.BindVertexArray(chunk.Mesh.VAO)
+		gl.DrawArrays(gl.TRIANGLES, 0, int32(chunk.Mesh.VertexCount))
+		gl.BindVertexArray(0)
+
+		//chunksRendered++
 	}
+}
+
+func (r *Renderer) DrawBlockHighlight(pos mgl32.Vec3, cam *camera.Camera, color mgl32.Vec3) {
+	gl.UseProgram(r.flatProgram)
+
+	model := mgl32.Translate3D(pos.X(), pos.Y(), pos.Z()).
+		Mul4(mgl32.Scale3D(1.001, 1.001, 1.001))
+
+	view := cam.GetViewMatrix()
+	proj := cam.GetProjectionMatrix()
+
+	// Use cached uniforms
+	gl.UniformMatrix4fv(r.flatUniModel, 1, false, &model[0])
+	gl.UniformMatrix4fv(r.flatUniView, 1, false, &view[0])
+	gl.UniformMatrix4fv(r.flatUniProjection, 1, false, &proj[0])
+	gl.Uniform3fv(r.flatUniColor, 1, &color[0])
+
+	gl.Disable(gl.DEPTH_TEST)
+	gl.DepthMask(false)
+	gl.Disable(gl.CULL_FACE)
+
+	gl.BindVertexArray(r.highlightVAO)
+
+	// 12 beams * 36 vertices per beam = 432 vertices
+	gl.DrawArrays(gl.TRIANGLES, 0, 432)
+
+	gl.BindVertexArray(0)
+
+	gl.DepthMask(true)
+	gl.Enable(gl.DEPTH_TEST)
+	gl.Enable(gl.CULL_FACE)
+}
+
+func (r *Renderer) initHighlightMesh() {
+	var vertices []float32
+	thickness := float32(0.02) // Adjust for thicker/thinner lines
+
+	// Helper to create a box (cube) at specific pos with specific size
+	addBeam := func(x, y, z, w, h, d float32) {
+		// Min/Max bounds for this beam
+		x1, y1, z1 := x, y, z
+		x2, y2, z2 := x+w, y+h, z+d
+
+		cube := []float32{
+			// Front face
+			x1, y1, z2, x2, y1, z2, x2, y2, z2,
+			x2, y2, z2, x1, y2, z2, x1, y1, z2,
+			// Back face
+			x2, y1, z1, x1, y1, z1, x1, y2, z1,
+			x1, y2, z1, x2, y2, z1, x2, y1, z1,
+			// Left face
+			x1, y1, z1, x1, y1, z2, x1, y2, z2,
+			x1, y2, z2, x1, y2, z1, x1, y1, z1,
+			// Right face
+			x2, y1, z2, x2, y1, z1, x2, y2, z1,
+			x2, y2, z1, x2, y2, z2, x2, y1, z2,
+			// Top face
+			x1, y2, z2, x2, y2, z2, x2, y2, z1,
+			x2, y2, z1, x1, y2, z1, x1, y2, z2,
+			// Bottom face
+			x1, y1, z1, x2, y1, z1, x2, y1, z2,
+			x2, y1, z2, x1, y1, z2, x1, y1, z1,
+		}
+		vertices = append(vertices, cube...)
+	}
+
+	// Generate the 12 edges
+	// Vertical Edges (4)
+	addBeam(0, 0, 0, thickness, 1, thickness)                     // Front-Left
+	addBeam(1-thickness, 0, 0, thickness, 1, thickness)           // Front-Right
+	addBeam(1-thickness, 0, 1-thickness, thickness, 1, thickness) // Back-Right
+	addBeam(0, 0, 1-thickness, thickness, 1, thickness)           // Back-Left
+
+	// Top Horizontal Edges (4)
+	addBeam(0, 1-thickness, 0, 1, thickness, thickness)           // Front
+	addBeam(0, 1-thickness, 1-thickness, 1, thickness, thickness) // Back
+	addBeam(0, 1-thickness, 0, thickness, thickness, 1)           // Left
+	addBeam(1-thickness, 1-thickness, 0, thickness, thickness, 1) // Right
+
+	// Bottom Horizontal Edges (4)
+	addBeam(0, 0, 0, 1, thickness, thickness)           // Front
+	addBeam(0, 0, 1-thickness, 1, thickness, thickness) // Back
+	addBeam(0, 0, 0, thickness, thickness, 1)           // Left
+	addBeam(1-thickness, 0, 0, thickness, thickness, 1) // Right
 
 	gl.GenVertexArrays(1, &r.highlightVAO)
 	gl.GenBuffers(1, &r.highlightVBO)
@@ -111,78 +221,36 @@ func (r *Renderer) initHighlightMesh() {
 	gl.BindVertexArray(0)
 }
 
-func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera) {
-	gl.UseProgram(r.shaderProgram)
-
-	// Get uniform locations
-	modelLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("model\x00"))
-	viewLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("view\x00"))
-	projectionLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("projection\x00"))
-
-	// Set view and projection matrices
-	view := cam.GetViewMatrix()
-	projection := cam.GetProjectionMatrix()
-
-	gl.UniformMatrix4fv(viewLoc, 1, false, &view[0])
-	gl.UniformMatrix4fv(projectionLoc, 1, false, &projection[0])
-
-	// Render each chunk
-	chunksRendered := 0
-	for _, chunk := range w.GetChunks() {
-		if chunk.Mesh == nil || chunk.Mesh.VertexCount == 0 {
-			continue
-		}
-
-		// Frustum culling
-		// if !cam.IsChunkVisible(chunk.X, chunk.Z, 16) {
-		// 	continue
-		// }
-
-		// Set model matrix (identity for now, chunk position handled in vertex data)
-		model := mgl32.Ident4()
-		gl.UniformMatrix4fv(modelLoc, 1, false, &model[0])
-
-		// Bind and draw
-		gl.BindVertexArray(chunk.Mesh.VAO)
-		gl.DrawArrays(gl.TRIANGLES, 0, int32(chunk.Mesh.VertexCount))
-		gl.BindVertexArray(0)
-
-		chunksRendered++
+func createProgram(vertexSource, fragmentSource string) (uint32, error) {
+	vertexShader, err := compileShader(vertexSource, gl.VERTEX_SHADER)
+	if err != nil {
+		return 0, err
 	}
-}
 
-func (r *Renderer) DrawBlockHighlight(pos mgl32.Vec3, cam *camera.Camera, color mgl32.Vec3) {
-	gl.UseProgram(r.shaderProgram)
+	fragmentShader, err := compileShader(fragmentSource, gl.FRAGMENT_SHADER)
+	if err != nil {
+		return 0, err
+	}
 
-	model := mgl32.Translate3D(pos.X(), pos.Y(), pos.Z()).
-		Mul4(mgl32.Scale3D(1.01, 1.01, 1.01))
+	program := gl.CreateProgram()
+	gl.AttachShader(program, vertexShader)
+	gl.AttachShader(program, fragmentShader)
+	gl.LinkProgram(program)
 
-	view := cam.GetViewMatrix()
-	proj := cam.GetProjectionMatrix()
+	var status int32
+	gl.GetProgramiv(program, gl.LINK_STATUS, &status)
+	if status == gl.FALSE {
+		var logLength int32
+		gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &logLength)
+		log := strings.Repeat("\x00", int(logLength+1))
+		gl.GetProgramInfoLog(program, logLength, nil, gl.Str(log))
+		return 0, fmt.Errorf("failed to link program: %v", log)
+	}
 
-	modelLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("model\x00"))
-	viewLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("view\x00"))
-	projLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("projection\x00"))
-	colorLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("uColor\x00"))
+	gl.DeleteShader(vertexShader)
+	gl.DeleteShader(fragmentShader)
 
-	gl.UniformMatrix4fv(modelLoc, 1, false, &model[0])
-	gl.UniformMatrix4fv(viewLoc, 1, false, &view[0])
-	gl.UniformMatrix4fv(projLoc, 1, false, &proj[0])
-	gl.Uniform3fv(colorLoc, 1, &color[0])
-
-	gl.Disable(gl.DEPTH_TEST)
-	gl.DepthMask(false)
-
-	gl.Disable(gl.CULL_FACE)
-	gl.LineWidth(2)
-
-	gl.BindVertexArray(r.highlightVAO)
-	gl.DrawArrays(gl.LINES, 0, 24)
-	gl.BindVertexArray(0)
-
-	gl.DepthMask(true)
-	gl.Enable(gl.DEPTH_TEST)
-	gl.Enable(gl.CULL_FACE)
+	return program, nil
 }
 
 func compileShader(source string, shaderType uint32) (uint32, error) {

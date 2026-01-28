@@ -144,6 +144,8 @@ func main() {
 
 	// Game loop
 	for !window.ShouldClose() {
+		glfw.PollEvents()
+
 		// Calculate delta time
 		currentTime := glfw.GetTime()
 		deltaTime := float32(currentTime - lastTime)
@@ -180,9 +182,11 @@ func main() {
 		// Clear screen
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		target := p.TargetBlock()
 		// Render world
 		renderer.RenderWorld(gameWorld, cam)
+
+		// Get target for rendering
+		target := p.TargetBlock()
 
 		// Render block highlight (if player is looking at a block)
 		if target.Hit {
@@ -198,6 +202,5 @@ func main() {
 
 		// Swap buffers and poll events
 		window.SwapBuffers()
-		glfw.PollEvents()
 	}
 }
