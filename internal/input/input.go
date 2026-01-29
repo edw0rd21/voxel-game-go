@@ -193,6 +193,7 @@ func (im *InputManager) keyCallback(w *glfw.Window, key glfw.Key, scancode int, 
 			fmt.Printf("Debug Mode: %v\n", im.debugMode)
 			// Unfreeze frustum when exiting debug mode so we don't get stuck with a weird view
 			if !im.debugMode {
+				im.player.TeleportToCamera()
 				im.camera.FrustumFrozen = false
 				// Force wireframe off when leaving debug mode
 				if *im.wireframe {

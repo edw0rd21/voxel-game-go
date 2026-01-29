@@ -102,8 +102,7 @@ func (p *Player) Update(deltaTime float32) {
 	bobOffsetY := float32(math.Sin(float64(p.walkingTime))) * 0.1
 	bobOffsetX := float32(math.Sin(float64(p.walkingTime/2.0))) * 0.05
 
-	eyeLevel := p.height - 0.2
-	p.camera.Position = p.PhysicsPos.Add(mgl32.Vec3{0, eyeLevel, 0})
+	p.camera.Position = p.PhysicsPos.Add(mgl32.Vec3{0, p.GetEyeHeight(), 0})
 
 	p.camera.Position[1] += bobOffsetY
 	sway := p.camera.Right.Mul(bobOffsetX)
@@ -321,4 +320,16 @@ func (p *Player) collidesWithPlayer(x, y, z float32) bool {
 		py < y+p.height &&
 		py+p.height > y &&
 		mgl32.Abs(pz-z) < p.width
+}
+func (p *Player) GetEyeHeight() float32 {
+	return p.height - 0.2
+}
+
+func (p *Player) TeleportToCamera() {
+	eyeOffset := mgl32.Vec3{0, p.GetEyeHeight(), 0}
+
+	p.PhysicsPos = p.camera.Position.Sub(eyeOffset)
+
+	p.velocity = mgl32.Vec3{0, 0, 0}
+	p.grounded = false
 }
