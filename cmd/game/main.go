@@ -94,14 +94,33 @@ func main() {
 		log.Fatalln("failed to add hotbar:", err)
 	}
 
+	pixelFont, err := ui.LoadFont("assets/fonts/PixelifySans-Regular.ttf", 24)
+	if err != nil {
+		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/PixelifySans-Regular.ttf exists!", err)
+	}
+
+	fpsText := ui.NewText(pixelFont, "FPS: 0", 10, 30, 1.0, mgl32.Vec3{1.0, 1.0, 0.0})
+
+	if err := fpsText.Init(); err != nil {
+		log.Fatalln("failed to init text:", err)
+	}
+	if err := uiRenderer.AddElement(fpsText); err != nil {
+		log.Fatalln("failed to add text:", err)
+	}
+
 	// Window resize callback
 	window.SetFramebufferSizeCallback(func(w *glfw.Window, width, height int) {
 		gl.Viewport(0, 0, int32(width), int32(height))
 		cam.SetSize(width, height)
-		uiRenderer.Resize(width, height)
+		const targetUIHeight = 720.0
+		uiScale := float32(height) / targetUIHeight
+
+		logicalWidth := int(float32(width) / uiScale)
+		logicalHeight := int(float32(height) / uiScale)
+		uiRenderer.Resize(logicalWidth, logicalHeight)
 
 		// Update UI elements with new size
-		screenSize := &ui.ScreenSize{Width: width, Height: height}
+		screenSize := &ui.ScreenSize{Width: logicalWidth, Height: logicalHeight}
 		crosshair.Update(screenSize)
 		hotbar.Update(screenSize)
 	})
@@ -155,7 +174,8 @@ func main() {
 		frameCount++
 		if currentTime-fpsTime >= 1.0 {
 			currentFPS = float64(frameCount) / (currentTime - fpsTime)
-			window.SetTitle(fmt.Sprintf("%s - FPS: %.1f", windowTitle, currentFPS))
+			fpsText.SetContent(fmt.Sprintf("FPS: %.0f", currentFPS))
+			fpsText.Update(nil)
 			frameCount = 0
 			fpsTime = currentTime
 		}

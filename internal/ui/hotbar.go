@@ -116,8 +116,9 @@ func (h *Hotbar) generateGeometry() {
 			borderColor)...)
 	}
 
-	h.fillVertexCount = len(fillVertices) / 5
-	h.borderVertexCount = len(borderVertices) / 5
+	h.fillVertexCount = len(fillVertices) / 7
+	h.borderVertexCount = len(borderVertices) / 7
+	stride := int32(7 * 4)
 
 	// Upload to VBO
 	gl.BindVertexArray(h.vao)
@@ -127,12 +128,16 @@ func (h *Hotbar) generateGeometry() {
 	gl.BufferData(gl.ARRAY_BUFFER, len(combined)*4, gl.Ptr(combined), gl.DYNAMIC_DRAW)
 
 	// Position attribute (2D)
-	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, stride, gl.PtrOffset(0))
 	gl.EnableVertexAttribArray(0)
 
 	// Color attribute
-	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(2*4))
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, stride, gl.PtrOffset(2*4))
 	gl.EnableVertexAttribArray(1)
+
+	//Texture Coord
+	gl.VertexAttribPointer(2, 2, gl.FLOAT, false, stride, gl.PtrOffset(5*4))
+	gl.EnableVertexAttribArray(2)
 
 	gl.BindVertexArray(0)
 

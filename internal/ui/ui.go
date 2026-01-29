@@ -30,6 +30,8 @@ type UIRenderer struct {
 	elements      []UIElement
 	width         int
 	height        int
+
+	whiteTexture uint32
 }
 
 func NewUIRenderer(width, height int) (*UIRenderer, error) {
@@ -62,6 +64,20 @@ func NewUIRenderer(width, height int) (*UIRenderer, error) {
 		return nil, fmt.Errorf("failed to link UI shader program: %v", log)
 	}
 
+	// Generate 1x1 White Texture
+	var whiteTex uint32
+	gl.GenTextures(1, &whiteTex)
+	gl.BindTexture(gl.TEXTURE_2D, whiteTex)
+
+	whitePixel := []uint8{255, 255, 255, 255}
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(whitePixel))
+
+	// Set texture parameters
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
 	gl.DeleteShader(vertexShader)
 	gl.DeleteShader(fragmentShader)
 
@@ -74,6 +90,7 @@ func NewUIRenderer(width, height int) (*UIRenderer, error) {
 		elements:      make([]UIElement, 0),
 		width:         width,
 		height:        height,
+		whiteTexture:  whiteTex,
 	}
 
 	return renderer, nil
@@ -120,6 +137,14 @@ func (r *UIRenderer) Render() {
 	// Set projection matrix
 	projectionLoc := gl.GetUniformLocation(r.shaderProgram, gl.Str("projection\x00"))
 	gl.UniformMatrix4fv(projectionLoc, 1, false, &r.projection[0])
+
+	// Bind the white texture to Unit 0
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindTexture(gl.TEXTURE_2D, r.whiteTexture)
+
+	// Tell shader that 'uTexture' is found at Slot 0
+	loc := gl.GetUniformLocation(r.shaderProgram, gl.Str("uTexture\x00"))
+	gl.Uniform1i(loc, 0)
 
 	// Draw all elements in order (determines layering)
 	for _, element := range r.elements {
@@ -172,13 +197,13 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 func createFilledRect(x, y, width, height float32, color mgl32.Vec3) []float32 {
 	return []float32{
 		// Triangle 1
-		x, y, color[0], color[1], color[2],
-		x + width, y, color[0], color[1], color[2],
-		x + width, y + height, color[0], color[1], color[2],
+		x, y, color[0], color[1], color[2], 0.0, 0.0,
+		x + width, y, color[0], color[1], color[2], 1.0, 0.0,
+		x + width, y + height, color[0], color[1], color[2], 1.0, 1.0,
 		// Triangle 2
-		x, y, color[0], color[1], color[2],
-		x + width, y + height, color[0], color[1], color[2],
-		x, y + height, color[0], color[1], color[2],
+		x, y, color[0], color[1], color[2], 0.0, 0.0,
+		x + width, y + height, color[0], color[1], color[2], 1.0, 1.0,
+		x, y + height, color[0], color[1], color[2], 0.0, 1.0,
 	}
 }
 
@@ -186,17 +211,17 @@ func createFilledRect(x, y, width, height float32, color mgl32.Vec3) []float32 {
 func createRectOutline(x, y, width, height float32, color mgl32.Vec3) []float32 {
 	return []float32{
 		// Top line
-		x, y, color[0], color[1], color[2],
-		x + width, y, color[0], color[1], color[2],
+		x, y, color[0], color[1], color[2], 0.0, 0.0,
+		x + width, y, color[0], color[1], color[2], 0.0, 0.0,
 		// Right line
-		x + width, y, color[0], color[1], color[2],
-		x + width, y + height, color[0], color[1], color[2],
+		x + width, y, color[0], color[1], color[2], 0.0, 0.0,
+		x + width, y + height, color[0], color[1], color[2], 0.0, 0.0,
 		// Bottom line
-		x + width, y + height, color[0], color[1], color[2],
-		x, y + height, color[0], color[1], color[2],
+		x + width, y + height, color[0], color[1], color[2], 0.0, 0.0,
+		x, y + height, color[0], color[1], color[2], 0.0, 0.0,
 		// Left line
-		x, y + height, color[0], color[1], color[2],
-		x, y, color[0], color[1], color[2],
+		x, y + height, color[0], color[1], color[2], 0.0, 0.0,
+		x, y, color[0], color[1], color[2], 0.0, 0.0,
 	}
 }
 

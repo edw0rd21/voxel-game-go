@@ -64,19 +64,24 @@ func (c *Crosshair) generateGeometry() {
 		c.color,
 	)...)
 
-	c.vertexCount = len(vertices) / 5
+	c.vertexCount = len(vertices) / 7
+	stride := int32(7 * 4)
 
 	gl.BindVertexArray(c.vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, c.vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
 
 	// Position attribute (2D)
-	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, stride, gl.PtrOffset(0))
 	gl.EnableVertexAttribArray(0)
 
 	// Color attribute
-	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(2*4))
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, stride, gl.PtrOffset(2*4))
 	gl.EnableVertexAttribArray(1)
+
+	//Texture Coord
+	gl.VertexAttribPointer(2, 2, gl.FLOAT, false, stride, gl.PtrOffset(5*4))
+	gl.EnableVertexAttribArray(2)
 
 	gl.BindVertexArray(0)
 
