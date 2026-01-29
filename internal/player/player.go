@@ -16,47 +16,98 @@ type TargetBlock struct {
 }
 
 type Player struct {
-	camera   *camera.Camera
-	world    *world.World
-	speed    float32
-	velocity mgl32.Vec3
+	camera *camera.Camera
+	world  *world.World
+
+	PhysicsPos mgl32.Vec3
+
+	walkSpeed float32
+	jumpForce float32
+	velocity  mgl32.Vec3
 
 	grounded bool
 	width    float32
 	height   float32
 
 	target TargetBlock
+
+	walkingTime float32
 }
 
 func NewPlayer(cam *camera.Camera, w *world.World) *Player {
 	return &Player{
-		camera: cam,
-		world:  w,
-		width:  0.6,
-		height: 1.8,
-		speed:  1.2,
+		camera:     cam,
+		world:      w,
+		PhysicsPos: cam.Position,
+		width:      0.6,
+		height:     1.8,
+		walkSpeed:  4.3,
+		jumpForce:  8.0,
 	}
 }
 
 func (p *Player) Update(deltaTime float32) {
+	const gravity = 25.0
+	const terminalVelocity = -50.0
+
 	// Apply gravity
 	if !p.grounded {
-		p.velocity[1] -= 20.0 * deltaTime
+		p.velocity[1] -= gravity * deltaTime
+		if p.velocity[1] < terminalVelocity {
+			p.velocity[1] = terminalVelocity
+		}
 	}
 
 	// Apply velocity
-	newPos := p.camera.Position.Add(p.velocity.Mul(deltaTime))
+	movement := p.velocity.Mul(deltaTime)
+	newPos := p.PhysicsPos.Add(movement)
 
 	// Collision detection
-	newPos = p.handleCollision(newPos)
-
-	p.camera.Position = newPos
+	finalPos := p.handleCollision(newPos, &p.velocity)
+	p.PhysicsPos = finalPos
 
 	// Check if grounded
 	p.grounded = p.isGrounded()
 
 	// Damping
-	p.velocity = p.velocity.Mul(0.8)
+	friction := float32(10.0)
+	if !p.grounded {
+		friction = 1.0 // Low friction in air (air control)
+	}
+
+	dragFactor := float32(1.0) - (friction * deltaTime)
+	if dragFactor < 0 {
+		dragFactor = 0
+	}
+
+	p.velocity[0] *= dragFactor
+	p.velocity[2] *= dragFactor
+
+	if mgl32.Abs(p.velocity[0]) < 0.1 {
+		p.velocity[0] = 0
+	}
+	if mgl32.Abs(p.velocity[2]) < 0.1 {
+		p.velocity[2] = 0
+	}
+
+	// View bobbing
+	horizontalSpeed := float32(math.Sqrt(float64(p.velocity[0]*p.velocity[0] + p.velocity[2]*p.velocity[2])))
+
+	if p.grounded && horizontalSpeed > 0.1 {
+		p.walkingTime += deltaTime * 10.0
+	} else {
+		p.walkingTime = 0
+	}
+
+	bobOffsetY := float32(math.Sin(float64(p.walkingTime))) * 0.1
+	bobOffsetX := float32(math.Sin(float64(p.walkingTime/2.0))) * 0.05
+
+	eyeLevel := p.height - 0.2
+	p.camera.Position = p.PhysicsPos.Add(mgl32.Vec3{0, eyeLevel, 0})
+
+	p.camera.Position[1] += bobOffsetY
+	sway := p.camera.Right.Mul(bobOffsetX)
+	p.camera.Position = p.camera.Position.Add(sway)
 
 	p.updateTarget()
 }
@@ -78,93 +129,86 @@ func (p *Player) TargetBlock() TargetBlock {
 	return p.target
 }
 
-func (p *Player) Move(direction mgl32.Vec3) {
-	p.velocity = p.velocity.Add(direction.Mul(p.speed))
+func (p *Player) Move(direction mgl32.Vec3, deltaTime float32) {
+	if direction.Len() > 0 {
+		accel := float32(60.0)
+		if !p.grounded {
+			accel = 10.0 // Slower acceleration in air
+		}
+
+		p.velocity = p.velocity.Add(direction.Mul(accel * deltaTime))
+
+		flatVel := mgl32.Vec3{p.velocity[0], 0, p.velocity[2]}
+		if flatVel.Len() > p.walkSpeed {
+			flatVel = flatVel.Normalize().Mul(p.walkSpeed)
+			p.velocity[0] = flatVel[0]
+			p.velocity[2] = flatVel[2]
+		}
+	}
 }
 
 func (p *Player) Jump() {
 	if p.grounded {
-		p.velocity[1] = 8.0
+		p.velocity[1] = p.jumpForce
+		p.grounded = false // Instant feedback
 	}
 }
 
-func (p *Player) handleCollision(newPos mgl32.Vec3) mgl32.Vec3 {
+func (p *Player) handleCollision(newPos mgl32.Vec3, velocity *mgl32.Vec3) mgl32.Vec3 {
 	// Simple AABB collision
-	minX := int(math.Floor(float64(newPos[0] - p.width/2)))
-	maxX := int(math.Floor(float64(newPos[0] + p.width/2)))
-	minY := int(math.Floor(float64(newPos[1])))
-	maxY := int(math.Floor(float64(newPos[1] + p.height)))
-	minZ := int(math.Floor(float64(newPos[2] - p.width/2)))
-	maxZ := int(math.Floor(float64(newPos[2] + p.width/2)))
-
-	// Check X axis
-	for y := minY; y <= maxY; y++ {
-		for z := minZ; z <= maxZ; z++ {
-			if p.world.GetBlock(minX, y, z) != world.BlockAir {
-				newPos[0] = p.camera.Position[0]
-				p.velocity[0] = 0
-				break
-			}
-			if p.world.GetBlock(maxX, y, z) != world.BlockAir {
-				newPos[0] = p.camera.Position[0]
-				p.velocity[0] = 0
-				break
-			}
-		}
+	testPos := mgl32.Vec3{newPos[0], p.PhysicsPos[1], p.PhysicsPos[2]}
+	if p.checkCollision(testPos) {
+		newPos[0] = p.PhysicsPos[0] // Revert X
+		velocity[0] = 0             // Stop X momentum
 	}
 
-	// Check Y axis
-	minX = int(math.Floor(float64(newPos[0] - p.width/2)))
-	maxX = int(math.Floor(float64(newPos[0] + p.width/2)))
-	minZ = int(math.Floor(float64(newPos[2] - p.width/2)))
-	maxZ = int(math.Floor(float64(newPos[2] + p.width/2)))
-
-	for x := minX; x <= maxX; x++ {
-		for z := minZ; z <= maxZ; z++ {
-			if p.world.GetBlock(x, minY, z) != world.BlockAir {
-				newPos[1] = p.camera.Position[1]
-				p.velocity[1] = 0
-				break
-			}
-			if p.world.GetBlock(x, maxY, z) != world.BlockAir {
-				newPos[1] = p.camera.Position[1]
-				p.velocity[1] = 0
-				break
-			}
-		}
+	testPos = mgl32.Vec3{newPos[0], p.PhysicsPos[1], newPos[2]}
+	if p.checkCollision(testPos) {
+		newPos[2] = p.PhysicsPos[2] // Revert Z
+		velocity[2] = 0             // Stop Z momentum
 	}
 
-	// Check Z axis
-	minX = int(math.Floor(float64(newPos[0] - p.width/2)))
-	maxX = int(math.Floor(float64(newPos[0] + p.width/2)))
-	minY = int(math.Floor(float64(newPos[1])))
-	maxY = int(math.Floor(float64(newPos[1] + p.height)))
+	testPos = mgl32.Vec3{newPos[0], newPos[1], newPos[2]}
+	if p.checkCollision(testPos) {
+		newPos[1] = p.PhysicsPos[1]
 
-	for x := minX; x <= maxX; x++ {
-		for y := minY; y <= maxY; y++ {
-			if p.world.GetBlock(x, y, minZ) != world.BlockAir {
-				newPos[2] = p.camera.Position[2]
-				p.velocity[2] = 0
-				break
-			}
-			if p.world.GetBlock(x, y, maxZ) != world.BlockAir {
-				newPos[2] = p.camera.Position[2]
-				p.velocity[2] = 0
-				break
-			}
+		if velocity[1] < 0 {
+			p.grounded = true
 		}
+
+		velocity[1] = 0 // Stop vertical momentum
 	}
 
 	return newPos
 }
 
-func (p *Player) isGrounded() bool {
-	minX := int(math.Floor(float64(p.camera.Position[0] - p.width/2)))
-	maxX := int(math.Floor(float64(p.camera.Position[0] + p.width/2)))
-	minZ := int(math.Floor(float64(p.camera.Position[2] - p.width/2)))
-	maxZ := int(math.Floor(float64(p.camera.Position[2] + p.width/2)))
-	checkY := int(math.Floor(float64(p.camera.Position[1]))) - 1
+func (p *Player) checkCollision(pos mgl32.Vec3) bool {
+	minX := int(math.Floor(float64(pos[0] - p.width/2)))
+	maxX := int(math.Floor(float64(pos[0] + p.width/2)))
+	minY := int(math.Floor(float64(pos[1])))
+	maxY := int(math.Floor(float64(pos[1] + p.height)))
+	minZ := int(math.Floor(float64(pos[2] - p.width/2)))
+	maxZ := int(math.Floor(float64(pos[2] + p.width/2)))
 
+	for x := minX; x <= maxX; x++ {
+		for y := minY; y <= maxY; y++ {
+			for z := minZ; z <= maxZ; z++ {
+				if p.world.GetBlock(x, y, z) != world.BlockAir {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (p *Player) isGrounded() bool {
+	minX := int(math.Floor(float64(p.PhysicsPos[0] - p.width/2)))
+	maxX := int(math.Floor(float64(p.PhysicsPos[0] + p.width/2)))
+	minZ := int(math.Floor(float64(p.PhysicsPos[2] - p.width/2)))
+	maxZ := int(math.Floor(float64(p.PhysicsPos[2] + p.width/2)))
+
+	checkY := int(math.Floor(float64(p.PhysicsPos[1]))) - 1
 	for x := minX; x <= maxX; x++ {
 		for z := minZ; z <= maxZ; z++ {
 			if p.world.GetBlock(x, checkY, z) != world.BlockAir {

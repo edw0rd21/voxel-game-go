@@ -9,7 +9,7 @@ import (
 
 const (
 	ChunkSize      = 16
-	ChunkHeight    = 64
+	ChunkHeight    = 256
 	RenderDistance = 16
 )
 
@@ -67,54 +67,103 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 		Z: chunkZ,
 	}
 
-	// Multi-octave terrain generation
 	for x := 0; x < ChunkSize; x++ {
 		for z := 0; z < ChunkSize; z++ {
 			worldX := float64(chunkX*ChunkSize + x)
 			worldZ := float64(chunkZ*ChunkSize + z)
 
-			// Layer 1: Base terrain (large rolling hills)
-			continentalness := w.noise.Eval2(worldX*0.005, worldZ*0.005)
+			// --- 1. THE CONTROL LAYERS ---
 
-			// Layer 2: Medium features (hills and valleys)
-			erosion := w.noise.Eval2(worldX*0.02, worldZ*0.02)
+			// A. RUGGEDNESS ("Biome Map")
+			// Frequency 0.002: Very large areas (changes slowly as you walk)
+			// -1.0 to -0.2 = Flat Plains
+			// -0.2 to 0.4  = Rolling Hills
+			//  0.4 to 1.0  = Extreme Mountains
+			ruggedness := w.noise.Eval2(worldX*0.004, worldZ*0.004)
 
-			// Layer 3: Fine detail (surface variation)
-			detail := w.noise.Eval2(worldX*0.1, worldZ*0.1)
+			// B. MOUNTAIN SHAPE (The actual spikes)
+			// Frequency 0.03: The shape of individual peaks
+			mountainShape := math.Abs(w.noise.Eval2(worldX*0.015, worldZ*0.015))
+			mountainShape = math.Pow(mountainShape, 2) // Power 3 makes peaks sharper & valleys wider
 
-			// Combine the layers with different weights
-			// Noise values range from -1 to 1, normalize to height
-			baseHeight := 35.0
-			continentalScale := 25.0
-			erosionScale := 10.0
-			detailScale := 3.0
+			// C. BASE ELEVATION (General ground height)
+			baseElevation := w.noise.Eval2(worldX*0.005, worldZ*0.005)
 
-			height := baseHeight +
-				continentalness*continentalScale +
-				erosion*erosionScale +
-				detail*detailScale
+			// --- 2. CALCULATE AMPLITUDE (How tall things are here) ---
+
+			// Start with a small amplitude (flat land default)
+			amplitude := 10.0
+
+			// Use Ruggedness to change amplitude dynamically
+			if ruggedness > 0.6 {
+				// EXTREME MOUNTAIN ZONE
+				// Scale amplitude from 40 up to 120 based on how deep we are in the zone
+				factor := (ruggedness - 0.4) / 0.6 // 0.0 to 1.0
+				amplitude = 40.0 + (factor * 100.0)
+			} else if ruggedness > 0.2 {
+				// HILLY ZONE
+				// Scale amplitude from 10 to 40
+				factor := (ruggedness + 0.2) / 0.6
+				amplitude = 10.0 + (factor * 30.0)
+			} else {
+				// FLAT PLAINS ZONE
+				// Very low amplitude (2 to 10)
+				amplitude = 2.0 + ((ruggedness + 1.0) * 8.0)
+			}
+
+			// --- 3. FINAL HEIGHT CALCULATION ---
+
+			baseLevel := 30.0
+
+			// Formula: BaseLevel + (Elevation Wave) + (Spikes * Dynamic Amplitude)
+			height := baseLevel +
+				(baseElevation * 20.0) + // General rise and fall of continents
+				(mountainShape * amplitude) + // The mountains (height varies by zone!)
+				(w.noise.Eval2(worldX*0.1, worldZ*0.1) * 2.0) // Tiny details
+
+			// Clamp
+			if height < 2 {
+				height = 2
+			}
+			if height > ChunkHeight-5 {
+				height = ChunkHeight - 5
+			}
 
 			heightInt := int(height)
 
-			// Generate terrain layers
+			// --- 4. BLOCK PLACEMENT ---
 			for y := 0; y < ChunkHeight; y++ {
-				if y < heightInt-4 {
-					// Deep underground = stone
+				if y == 0 {
 					chunk.Blocks[x][y][z].Type = BlockStone
-				} else if y < heightInt {
-					// Near surface = dirt
-					chunk.Blocks[x][y][z].Type = BlockDirt
-				} else if y == heightInt {
-					// Surface = grass
-					chunk.Blocks[x][y][z].Type = BlockGrass
-				} else {
-					// Above ground = air
+					continue
+				}
+				if y > heightInt {
 					chunk.Blocks[x][y][z].Type = BlockAir
+					continue
+				}
+
+				// Surface Logic
+				if y == heightInt {
+					// Snow caps only appear if Y is high AND the terrain is rugged
+					if y > 80 && ruggedness > 0.4 {
+						chunk.Blocks[x][y][z].Type = BlockStone // Snow
+					} else {
+						chunk.Blocks[x][y][z].Type = BlockGrass
+					}
+				} else if y > heightInt-4 {
+					// Dirt layer
+					// If it's a super steep mountain (high ruggedness), expose stone
+					if y > 60 && ruggedness > 0.5 {
+						chunk.Blocks[x][y][z].Type = BlockStone
+					} else {
+						chunk.Blocks[x][y][z].Type = BlockDirt
+					}
+				} else {
+					chunk.Blocks[x][y][z].Type = BlockStone
 				}
 			}
 		}
 	}
-
 	return chunk
 }
 

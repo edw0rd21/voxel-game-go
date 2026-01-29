@@ -89,12 +89,10 @@ func (c *Camera) updateCameraVectors() {
 	c.Right = c.Front.Cross(c.WorldUp).Normalize()
 	c.Up = c.Right.Cross(c.Front).Normalize()
 
-	// [GodMode] Only update frustum if NOT frozen
+	// Only update frustum if NOT frozen
 	if !c.FrustumFrozen {
 		c.updateFrustum()
 	}
-	// Update Frustum Planes whenever camera moves
-	c.updateFrustum()
 }
 
 func (c *Camera) SetSize(width, height int) {

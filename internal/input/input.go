@@ -97,7 +97,7 @@ func (im *InputManager) updatePlayer(deltaTime float32) {
 	// Apply movement
 	if moveDir.Len() > 0 {
 		moveDir = moveDir.Normalize()
-		im.player.Move(moveDir)
+		im.player.Move(moveDir, deltaTime)
 	}
 
 	// Player Actions
