@@ -8,6 +8,7 @@ const (
 	BlockDirt  = 1
 	BlockGrass = 2
 	BlockStone = 3
+	BlockSnow  = 4
 )
 
 // Texture Atlas Constants
@@ -19,10 +20,11 @@ const (
 
 // Texture Indice
 var (
-	TexDirt      = [2]float32{6, 0} // Column 6, Row 0 (Brown Dirt)
-	TexGrassTop  = [2]float32{8, 0} // Column 8, Row 0 (Lush Green Top)
-	TexGrassSide = [2]float32{7, 4} // Column 7, Row 4 (Dirt with Green Lip)
-	TexStone     = [2]float32{3, 5} // Column 3, Row 5 (Grey Stone/Cobble)
+	TexDirt      = [2]float32{6, 0}
+	TexGrassTop  = [2]float32{8, 0}
+	TexGrassSide = [2]float32{7, 4}
+	TexStone     = [2]float32{3, 4}
+	TexSnow      = [2]float32{3, 5}
 )
 
 // Texture Coordinates helper
@@ -34,6 +36,8 @@ func GetBlockUVs(blockType BlockType, faceDirection int) (float32, float32) {
 		tileCoords = TexDirt
 	case BlockStone:
 		tileCoords = TexStone
+	case BlockSnow:
+		tileCoords = TexSnow
 	case BlockGrass:
 		if faceDirection == 4 { // Top
 			tileCoords = TexGrassTop

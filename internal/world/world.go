@@ -48,8 +48,12 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 
 	for x := 0; x < ChunkSize; x++ {
 		for z := 0; z < ChunkSize; z++ {
-			worldX := float64(chunkX*ChunkSize + x)
-			worldZ := float64(chunkZ*ChunkSize + z)
+
+			absX := chunkX*ChunkSize + x
+			absZ := chunkZ*ChunkSize + z
+
+			worldX := float64(absX)
+			worldZ := float64(absZ)
 
 			// Terrain Gen
 			ruggedness := w.noise.Eval2(worldX*0.004, worldZ*0.004)
@@ -96,13 +100,15 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 				}
 
 				if y == heightInt {
-					if y > 80 && ruggedness > 0.4 {
+					if y > 85+int(ruggedness*5) {
+						chunk.Blocks[x][y][z].Type = BlockSnow
+					} else if y > 72+int(ruggedness*10) {
 						chunk.Blocks[x][y][z].Type = BlockStone
 					} else {
 						chunk.Blocks[x][y][z].Type = BlockGrass
 					}
 				} else if y > heightInt-4 {
-					if y > 60 && ruggedness > 0.5 {
+					if y > 80 {
 						chunk.Blocks[x][y][z].Type = BlockStone
 					} else {
 						chunk.Blocks[x][y][z].Type = BlockDirt

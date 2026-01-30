@@ -102,7 +102,7 @@ func (r *Renderer) DrawBlockHighlight(pos mgl32.Vec3, cam *camera.Camera, color 
 	gl.UniformMatrix4fv(gl.GetUniformLocation(r.highlightShader, gl.Str("model\x00")), 1, false, &model[0])
 	gl.UniformMatrix4fv(gl.GetUniformLocation(r.highlightShader, gl.Str("view\x00")), 1, false, &view[0])
 	gl.UniformMatrix4fv(gl.GetUniformLocation(r.highlightShader, gl.Str("projection\x00")), 1, false, &proj[0])
-	gl.Uniform3fv(gl.GetUniformLocation(r.highlightShader, gl.Str("color\x00")), 1, &color[0])
+	gl.Uniform3fv(gl.GetUniformLocation(r.highlightShader, gl.Str("uColor\x00")), 1, &color[0])
 
 	gl.Disable(gl.DEPTH_TEST)
 	gl.DepthMask(false)
