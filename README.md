@@ -1,23 +1,26 @@
 # Simple Voxel Game (Minecraft Clone)
 
-A simple Minecraft-like voxel game built in Go with OpenGL.
+A simple Minecraft-like voxel game built in Go with OpenGL 4.1.
 
 ## Features
 
-- 3D voxel-based world with chunk system
-- Infinite world generation with dynamic chunk loading/unloading
-- Terrain generation using multi-octave noise
-- First-person camera with mouse look
-- WASD movement with physics (gravity, collision)
-- Block placement and destruction
-- Multiple block types (grass, dirt, stone)
+- **3D Voxel World:** Infinite world generation with dynamic chunk loading/unloading.
+- **Advanced Terrain:** Multi-octave noise generation (Continental, Erosion, Detail layers).
+- **Physics Engine:** AABB collision detection, gravity, and raycasting for block interaction.
+- **User Interface (UI):**
+  - Custom UI rendering engine with texture support.
+  - TrueType Font (TTF) rendering with dynamic texture atlases.
+  - Interactive Hotbar with block selection.
+  - Real-time FPS Counter.
+  - **Resolution Independence:** UI scales correctly on High-DPI and 4K monitors.
+- **Camera:** First-person camera with smooth view bobbing and mouse look.
 
-### Performance optimizations:
-- Face culling (only visible block faces rendered)
-- Frustum culling (chunks behind camera not rendered)
-- Chunk update throttling
-- Directional face shading for better depth perception
-
+### Performance Optimizations:
+- **Face Culling:** Hidden block faces are removed from the mesh.
+- **Frustum Culling:** Chunks outside the camera's view are not rendered.
+- **Chunk Throttling:** Updates are staggered to prevent frame drops.
+- **Batch Rendering:** UI elements are batched to minimize draw calls.
+- **Directional Shading:** Face-dependent lighting for depth perception.
 
 ## Controls
 
@@ -125,108 +128,80 @@ chunkUpdateInterval := 1.0  // Change from 0.5 to 1.0
 
 ```bash
 glfw.SwapInterval(0)  // Change from 1 to 0
-```
-#### Performance features already enabled:
-
-- Face culling (only visible block faces)
-- Frustum culling (chunks behind camera not rendered)
-- Chunk update throttling (not every frame)
-- Dynamic chunk loading/unloading
-
 
 ## Project Structure
 
 ```
 voxel-game/
+├── assets/                 # Game assets
+│   └── fonts/             # .ttf font files
 ├── cmd/
 │   └── game/
-│       └── main.go                 # Entry point
+│       └── main.go         # Entry point & Game Loop
 ├── internal/
 │   ├── camera/
-│   │   └── camera.go              # Camera controls
+│   │   └── camera.go       # Camera logic
 │   ├── input/
-│   │   └── input.go               # Input handling
+│   │   └── input.go        # Input manager
 │   ├── player/
-│   │   └── player.go              # Player physics & raycasting
+│   │   └── player.go       # Player physics & state
 │   ├── render/
-│   │   ├── renderer.go            # OpenGL rendering
-│   │   └── shaders/
-│   │       ├── vertex.glsl        # Vertex shader
-│   │       └── fragment.glsl      # Fragment shader
+│   │   ├── renderer.go     # World Renderer
+│   │   └── shaders/        # World Shaders (vertex/fragment)
+│   ├── ui/                 # UI System
+│   │   ├── font.go         # Font Loader & Atlas Generator
+│   │   ├── text.go         # Text Component
+│   │   ├── ui.go           # UI Renderer (Ortho projection)
+│   │   └── shaders/        # UI Shaders (supports text & color)
 │   └── world/
-│       └── world.go               # World & chunk management
+│       └── world.go        # Chunk management & generation
 ├── go.mod
 └── README.md
 ```
 
 ## How It Works
 
+### The UI System
+The UI uses a separate rendering pipeline with an Orthographic Projection.
+
+- Uber-Shader: A single shader handles both solid-color shapes (like the crosshair) and textured elements (like text) by using a default white texture for non-textured objects.
+
+- Font Rendering: We use freetype to generate a texture atlas from .ttf files at runtime. Glyphs are batched into a single mesh for high performance.
+
+- Virtual Resolution: The UI uses a reference height (720p). On high-DPI or 4K screens, the projection matrix automatically scales elements to maintain consistent size and readability.
+
 ### Chunk System
-The world is divided into 16x64x16 chunks. Each chunk contains blocks and generates its own mesh. Only visible block faces are rendered (faces adjacent to other solid blocks are culled).
+The world is divided into 16x64x16 chunks. Each chunk generates its own mesh. Only visible block faces are rendered (faces adjacent to other solid blocks are culled).
 
-### Infinite World:
-
-- Chunks dynamically load as you explore
-- Chunks outside render distance automatically unload (with OpenGL cleanup)
-- Render distance configurable (default: 3 chunks = 48 blocks radius)
-- Chunk updates throttled to every 0.5 seconds for performance
-
-### Rendering Optimizations:
-
-- Face culling: Only exposed block faces are added to mesh
-- Frustum culling: Chunks behind the camera aren't rendered
-- Directional shading: Different brightness per face for depth perception
+### Infinite World
+- Chunks dynamically load as you explore.
+- Chunks outside render distance automatically unload (triggering OpenGL buffer cleanup).
+- Generation is deterministic based on a seed.
 
 ### Terrain Generation
-- Advanced multi-octave noise-based generation using OpenSimplex noise:
-    - Continental layer (0.005 frequency): Large-scale landmasses and oceans
-    - Erosion layer (0.02 frequency): Medium hills and valleys
-    - Detail layer (0.1 frequency): Surface variation and bumps
-
-- Each layer contributes to the final height with different weights, creating realistic and varied terrain. Deterministic generation ensures the same terrain appears at the same coordinates every time.
-
-### Mesh Generation
-For each chunk, the system:
-1. Iterates through all blocks
-2. Checks each face of solid blocks
-3. Only adds faces that are exposed (adjacent to air or chunk boundary)
-4. Combines all faces into a single mesh per chunk
-
-### Physics
-- Gravity constantly pulls the player down
-- AABB (Axis-Aligned Bounding Box) collision detection
-- Separate collision checks for X, Y, Z axes
-- Player is 0.6 blocks wide and 1.8 blocks tall
-
-### Raycasting
-When placing/breaking blocks:
-1. Cast a ray from camera position in the look direction
-2. Check each point along the ray (0.1 block intervals)
-3. When a solid block is hit, determine which face was hit
-4. For breaking: remove the hit block
-5. For placing: add a block on the hit face
+Advanced multi-octave noise-based generation:
+1.  **Continental Layer:** Large-scale landmasses and oceans.
+2.  **Erosion Layer:** Medium hills and valleys.
+3.  **Detail Layer:** Surface variation.
 
 ## Future Improvements
 
-Some ideas for extending this project:
-- Texture mapping instead of solid colors
-- More block types
-- Inventory system
-- Saving/loading worlds
-- Water and transparency
-- Day/night cycle with lighting
-- Particles and sound effects
-- Biomes (desert, forest, snow)
-- Caves and underground generation
-- Multiplayer support
+- [ ] Texture mapping for world blocks (currently only UI supports textures)
+- [ ] Save/Load world system
+- [ ] Water physics and transparency
+- [ ] Day/Night cycle
+- [ ] Sound effects
+- [ ] Inventory system
 
 ## Completed Features
 
-- Better terrain generation (Perlin/Simplex noise)
-- Infinite world generation (load/unload chunks dynamically)
-- Flying/creative mode
-- Performance optimizations
-- Face shading for depth
+- [x] Infinite procedural terrain
+- [x] Dynamic chunk loading
+- [x] Physics-based movement (Gravity, Collision)
+- [x] View Bobbing
+- [x] **UI System & Text Rendering**
+- [x] **Resolution Independence**
+- [x] Debug/God Mode
 
 ## License
 
