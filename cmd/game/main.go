@@ -67,6 +67,19 @@ func main() {
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	log.Println("OpenGL version:", version)
 
+	// Load Font (UI)
+	pixelFont, err := ui.LoadFont("assets/fonts/PixelifySans-Regular.ttf", 24)
+	if err != nil {
+		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/PixelifySans-Regular.ttf exists!", err)
+	}
+
+	// Load Texture Atlas (World)
+	atlas, err := render.LoadTexture("assets/atlas.png")
+	if err != nil {
+		log.Fatalf("Failed to load texture atlas: %v", err)
+	}
+	log.Printf("Loaded atlas.png (ID: %d)", atlas.ID)
+
 	// Initialize camera
 	cam := camera.NewCamera(windowWidth, windowHeight)
 
@@ -94,13 +107,7 @@ func main() {
 		log.Fatalln("failed to add hotbar:", err)
 	}
 
-	pixelFont, err := ui.LoadFont("assets/fonts/PixelifySans-Regular.ttf", 24)
-	if err != nil {
-		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/PixelifySans-Regular.ttf exists!", err)
-	}
-
 	fpsText := ui.NewText(pixelFont, "FPS: 0", 10, 30, 1.0, mgl32.Vec3{1.0, 1.0, 0.0})
-
 	if err := fpsText.Init(); err != nil {
 		log.Fatalln("failed to init text:", err)
 	}
@@ -136,13 +143,6 @@ func main() {
 	// Initialize input manager
 	inputMgr := input.NewInputManager(window, cam, p, &wireframeMode)
 
-	// Debug
-	fmt.Printf("BlockAir = %d\n", world.BlockAir)
-	fmt.Printf("BlockDirt = %d\n", world.BlockDirt)
-	fmt.Printf("BlockGrass = %d\n", world.BlockGrass)
-	fmt.Printf("BlockStone = %d\n", world.BlockStone)
-	fmt.Printf("Initial selected block = %d\n", inputMgr.GetSelectedBlock())
-
 	// Capture cursor
 	window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 
@@ -156,10 +156,10 @@ func main() {
 
 	// Chunk update throttling
 	lastChunkUpdate := glfw.GetTime()
-	chunkUpdateInterval := 0.5 // Update chunks every 0.5 seconds
+	chunkUpdateInterval := 0.5
 
 	// Track selected block for hotbar
-	lastSelectedBlock := world.BlockAir
+	var lastSelectedBlock world.BlockType = world.BlockAir
 
 	// Game loop
 	for !window.ShouldClose() {
@@ -205,12 +205,10 @@ func main() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		// Render world
-		renderer.RenderWorld(gameWorld, cam)
+		renderer.RenderWorld(gameWorld, cam, atlas.ID)
 
-		// Get target for rendering
+		// Render block highlight
 		target := p.TargetBlock()
-
-		// Render block highlight (if player is looking at a block)
 		if target.Hit {
 			renderer.DrawBlockHighlight(
 				target.Pos,
