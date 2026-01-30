@@ -128,6 +128,7 @@ chunkUpdateInterval := 1.0  // Change from 0.5 to 1.0
 
 ```bash
 glfw.SwapInterval(0)  // Change from 1 to 0
+```
 
 ## Project Structure
 
