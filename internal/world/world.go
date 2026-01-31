@@ -57,18 +57,19 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 
 			// Terrain Gen
 			ruggedness := w.noise.Eval2(worldX*0.004, worldZ*0.004)
+			jitter := w.noise.Eval2(worldX*0.5, worldZ*0.5)
 
 			mountainShape := math.Abs(w.noise.Eval2(worldX*0.015, worldZ*0.015))
 			mountainShape = math.Pow(mountainShape, 2)
 
 			baseElevation := w.noise.Eval2(worldX*0.005, worldZ*0.005)
-			amplitude := 10.0
+			var amplitude float64
 
 			if ruggedness > 0.6 {
-				factor := (ruggedness - 0.4) / 0.6 // 0.0 to 1.0
+				factor := math.Min((ruggedness-0.6)/0.4, 1.0)
 				amplitude = 40.0 + (factor * 100.0)
 			} else if ruggedness > 0.2 {
-				factor := (ruggedness + 0.2) / 0.6
+				factor := math.Min((ruggedness-0.2)/0.4, 1.0)
 				amplitude = 10.0 + (factor * 30.0)
 			} else {
 				amplitude = 2.0 + ((ruggedness + 1.0) * 8.0)
@@ -100,9 +101,9 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 				}
 
 				if y == heightInt {
-					if y > 85+int(ruggedness*5) {
+					if y > 90+int(jitter*11) {
 						chunk.Blocks[x][y][z].Type = BlockSnow
-					} else if y > 72+int(ruggedness*10) {
+					} else if y > 72+int(jitter*7) {
 						chunk.Blocks[x][y][z].Type = BlockStone
 					} else {
 						chunk.Blocks[x][y][z].Type = BlockGrass
