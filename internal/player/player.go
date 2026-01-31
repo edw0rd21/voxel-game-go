@@ -35,7 +35,7 @@ type Player struct {
 }
 
 func NewPlayer(cam *camera.Camera, w *world.World) *Player {
-	return &Player{
+	p := &Player{
 		camera:     cam,
 		world:      w,
 		PhysicsPos: cam.Position,
@@ -44,19 +44,13 @@ func NewPlayer(cam *camera.Camera, w *world.World) *Player {
 		walkSpeed:  4.3,
 		jumpForce:  8.0,
 	}
+	p.camera.Position = p.PhysicsPos.Add(mgl32.Vec3{0, p.GetEyeHeight(), 0})
+	return p
 }
 
 func (p *Player) Update(deltaTime float32) {
 	const gravity = 25.0
 	const terminalVelocity = -50.0
-
-	// Apply gravity
-	if !p.grounded {
-		p.velocity[1] -= gravity * deltaTime
-		if p.velocity[1] < terminalVelocity {
-			p.velocity[1] = terminalVelocity
-		}
-	}
 
 	// Apply velocity
 	movement := p.velocity.Mul(deltaTime)
@@ -68,6 +62,19 @@ func (p *Player) Update(deltaTime float32) {
 
 	// Check if grounded
 	p.grounded = p.isGrounded()
+
+	// Apply gravity
+	if !p.grounded {
+		p.velocity[1] -= gravity * deltaTime
+		if p.velocity[1] < terminalVelocity {
+			p.velocity[1] = terminalVelocity
+		}
+	} else {
+		// velocity is zero when grounded to prevent accumulation
+		if p.velocity[1] < 0 {
+			p.velocity[1] = 0
+		}
+	}
 
 	// Damping
 	friction := float32(10.0)
@@ -312,9 +319,9 @@ func (p *Player) PlaceBlock(blockType world.BlockType) {
 }
 
 func (p *Player) collidesWithPlayer(x, y, z float32) bool {
-	px := p.camera.Position.X()
-	py := p.camera.Position.Y()
-	pz := p.camera.Position.Z()
+	px := p.PhysicsPos.X()
+	py := p.PhysicsPos.Y()
+	pz := p.PhysicsPos.Z()
 
 	return mgl32.Abs(px-x) < p.width &&
 		py < y+p.height &&
