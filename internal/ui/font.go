@@ -42,7 +42,7 @@ func LoadFont(filePath string, fontSize float64, smooth bool) (*Font, error) {
 
 	// Setup Atlas Image (512x512 for basic ASCII)
 	const atlasSize = 1024
-	const padding = 8
+	const padding = 2
 	atlasImg := image.NewRGBA(image.Rect(0, 0, atlasSize, atlasSize))
 
 	for i := range atlasImg.Pix {
@@ -96,7 +96,7 @@ func LoadFont(filePath string, fontSize float64, smooth bool) (*Font, error) {
 		gh := (b.Max.Y - b.Min.Y).Ceil()
 
 		if currentX+gw+padding >= atlasSize {
-			currentX = padding
+			currentX = 0
 			currentY += maxRowHeight + padding
 			maxRowHeight = 0
 		}

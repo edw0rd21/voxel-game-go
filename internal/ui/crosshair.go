@@ -20,14 +20,18 @@ type Crosshair struct {
 	texture uint32
 }
 
-func NewCrosshair(screenWidth, screenHeight int) *Crosshair {
-	return &Crosshair{
+func NewCrosshair(screenWidth, screenHeight int) (*Crosshair, error) {
+	c := &Crosshair{
 		color:        mgl32.Vec3{1.0, 1.0, 0.0}, // White
 		size:         10.0,
 		thickness:    2.0,
 		screenWidth:  screenWidth,
 		screenHeight: screenHeight,
 	}
+	if err := c.Init(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (c *Crosshair) Init() error {
@@ -109,9 +113,9 @@ func (c *Crosshair) Update(state interface{}) {
 }
 
 func (c *Crosshair) Draw(shaderProgram uint32, projection mgl32.Mat4) {
+	gl.BindVertexArray(c.vao)
 	gl.ActiveTexture(gl.TEXTURE0)
 	gl.BindTexture(gl.TEXTURE_2D, c.texture)
-	gl.BindVertexArray(c.vao)
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(c.vertexCount))
 	gl.BindVertexArray(0)
 

@@ -31,7 +31,7 @@ func NewNotificationSystem(font *Font, screenWidth, screenHeight int) *Notificat
 		font:          font,
 		notifications: make([]Notification, 0),
 		xPos:          20,
-		yPos:          100,
+		yPos:          200,
 		stackUpwards:  true,
 		screenWidth:   screenWidth,
 		screenHeight:  screenHeight,

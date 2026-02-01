@@ -19,6 +19,11 @@ type Renderer struct {
 	highlightVBO    uint32
 }
 
+type RenderStats struct {
+	ChunksRendered int
+	TotalVertices  int32
+}
+
 func NewRenderer() (*Renderer, error) {
 	// Compile Main Shader
 	shaderProgram, err := createShaderProgram("internal/render/shaders/vertex.glsl", "internal/render/shaders/fragment.glsl")
@@ -43,7 +48,8 @@ func NewRenderer() (*Renderer, error) {
 	return r, nil
 }
 
-func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera, atlasTextureID uint32) {
+func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera, atlasTextureID uint32) RenderStats {
+	var stats RenderStats
 	gl.UseProgram(r.shaderProgram)
 
 	gl.ActiveTexture(gl.TEXTURE0)
@@ -85,8 +91,13 @@ func (r *Renderer) RenderWorld(w *world.World, cam *camera.Camera, atlasTextureI
 
 		gl.BindVertexArray(chunk.Mesh.VAO)
 		gl.DrawArrays(gl.TRIANGLES, 0, int32(chunk.Mesh.VertexCount))
+
+		stats.ChunksRendered++
+		stats.TotalVertices += int32(chunk.Mesh.VertexCount)
+
 	}
 	gl.BindVertexArray(0)
+	return stats
 }
 
 func (r *Renderer) DrawBlockHighlight(pos mgl32.Vec3, cam *camera.Camera, color mgl32.Vec3) {

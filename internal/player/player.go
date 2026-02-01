@@ -122,10 +122,10 @@ func (p *Player) Update(deltaTime float32) {
 	sway := p.camera.Right.Mul(bobOffsetX)
 	p.camera.Position = p.camera.Position.Add(sway)
 
-	p.updateTarget()
+	p.UpdateTarget()
 }
 
-func (p *Player) updateTarget() {
+func (p *Player) UpdateTarget() {
 	hit, x, y, z, face := p.Raycast(5.0)
 	if hit {
 		p.target = TargetBlock{

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 
@@ -21,6 +22,8 @@ const (
 	windowHeight = 720
 	windowTitle  = "Voxel Game"
 )
+
+var memStats runtime.MemStats
 
 func init() {
 	// GLFW requires this to run on main thread
@@ -71,13 +74,13 @@ func main() {
 	log.Println("OpenGL version:", version)
 
 	// Load Fonts
-	pixelFont, err := ui.LoadFont("assets/fonts/PixelifySans-Regular.ttf", 24, false)
+	pixelFont, err := ui.LoadFont("assets/fonts/MinecraftTen-VGORe.ttf", 24, false)
 	if err != nil {
-		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/PixelifySans-Regular.ttf exists!", err)
+		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/MinecraftTen-VGORe.ttf exists!", err)
 	}
-	cleanFont, err := ui.LoadFont("assets/fonts/Roboto-Bold.ttf", 24, true)
+	cleanFont, err := ui.LoadFont("assets/fonts/MinecraftTen-VGORe.ttf", 24, true)
 	if err != nil {
-		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/Roboto-Bold exists!", err)
+		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/MinecraftTen-VGORe.ttf exists!", err)
 	}
 
 	// Load Texture Atlas (World)
@@ -104,16 +107,19 @@ func main() {
 	defer uiRenderer.Cleanup()
 
 	// Add UI elements
-	notifications := ui.NewNotificationSystem(cleanFont, windowWidth, windowHeight)
+	notifications := ui.NewNotificationSystem(pixelFont, windowWidth, windowHeight)
 	if err := uiRenderer.AddElement(notifications); err != nil {
 		log.Fatalln("failed to add notification system:", err)
 	}
 	notifications.Add("Welcome to Voxel Engine!")
 
-	debugLayer := ui.NewDebugLayer(pixelFont, windowWidth, windowHeight)
+	debugLayer := ui.NewDebugLayer(cleanFont, windowWidth, windowHeight)
 	uiRenderer.AddElement(debugLayer)
 
-	crosshair := ui.NewCrosshair(windowWidth, windowHeight)
+	crosshair, err := ui.NewCrosshair(windowWidth, windowHeight)
+	if err != nil {
+		log.Fatalln("failed to init crosshair:", err)
+	}
 	if err := uiRenderer.AddElement(crosshair); err != nil {
 		log.Fatalln("failed to add crosshair:", err)
 	}
@@ -179,12 +185,16 @@ func main() {
 		deltaTime := float32(currentTime - lastTime)
 		lastTime = currentTime
 
-		// FPS calculation
 		frameCount++
 		if currentTime-fpsTime >= 1.0 {
 			currentFPS = float64(frameCount) / (currentTime - fpsTime)
 			frameCount = 0
 			fpsTime = currentTime
+		}
+
+		//Memory Stats (every 10 frames)
+		if frameCount%10 == 0 {
+			runtime.ReadMemStats(&memStats)
 		}
 
 		// Handle input
@@ -201,21 +211,10 @@ func main() {
 				notifications.Add("Debug Mode: OFF")
 			}
 		}
-
-		debugLayer.UpdateInfo(
-			currentFPS,
-			cam.Position,
-			int(cam.Position[0])>>4,
-			int(cam.Position[2])>>4,
-			cam.Front,
-		)
-		debugLayer.Update(nil)
-
-		notifications.Update(nil)
-
-		// Update player - ONLY update player physics if NOT in debug mode
 		if !inputMgr.IsDebugMode() {
 			p.Update(deltaTime)
+		} else {
+			p.UpdateTarget()
 		}
 
 		// Update world chunks based on player position
@@ -235,22 +234,37 @@ func main() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		// Render world
-		renderer.RenderWorld(gameWorld, cam, atlas.ID)
+		renderStats := renderer.RenderWorld(gameWorld, cam, atlas.ID)
 
 		// Render block highlight
 		target := p.TargetBlock()
+		targetInfo := "Air" // Default text
 		if target.Hit {
-			renderer.DrawBlockHighlight(
-				target.Pos,
-				cam,
-				mgl32.Vec3{1.0, 1.0, 1.0},
-			)
+
+			renderer.DrawBlockHighlight(target.Pos, cam, mgl32.Vec3{1.0, 1.0, 1.0})
+			targetInfo = fmt.Sprintf("Hit [%.0f, %.0f, %.0f]", target.Pos[0], target.Pos[1], target.Pos[2])
 		}
+
+		debugLayer.UpdateInfo(
+			currentFPS,
+			deltaTime,
+			cam.Position,
+			cam.Front,
+			int(cam.Position[0])>>4,
+			int(cam.Position[2])>>4,
+			memStats.Alloc/1024/1024, // Bytes to MB
+			runtime.NumGoroutine(),
+			renderStats.ChunksRendered, // From RenderWorld
+			renderStats.TotalVertices,  // From RenderWorld
+			targetInfo,                 // From TargetBlock logic
+		)
+		debugLayer.Update(nil)
+		notifications.Update(nil)
 
 		gl.Disable(gl.DEPTH_TEST)
 		gl.DepthMask(false)
 		gl.Enable(gl.BLEND)
-		gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+		gl.BlendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 		gl.Disable(gl.CULL_FACE)
 		// Render UI
 		uiRenderer.Render()
