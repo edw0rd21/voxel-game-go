@@ -164,9 +164,6 @@ func (im *InputManager) mouseButtonCallback(w *glfw.Window, button glfw.MouseBut
 		if button == glfw.MouseButtonLeft {
 			// Break block
 			im.player.BreakBlock()
-		} else if button == glfw.MouseButtonRight {
-			// Place block
-			im.player.PlaceBlock(im.selectedBlock)
 		}
 	}
 }
@@ -188,6 +185,11 @@ func (im *InputManager) keyCallback(w *glfw.Window, key glfw.Key, scancode int, 
 			} else {
 				w.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
 			}
+
+		case glfw.KeyB:
+			// Place block
+			im.player.PlaceBlock(im.selectedBlock)
+
 		case glfw.KeyG:
 			im.debugMode = !im.debugMode
 			fmt.Printf("Debug Mode: %v\n", im.debugMode)

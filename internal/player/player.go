@@ -52,6 +52,11 @@ func (p *Player) Update(deltaTime float32) {
 	const gravity = 25.0
 	const terminalVelocity = -50.0
 
+	if p.checkCollision(p.PhysicsPos) {
+		p.PhysicsPos[1] += 10.0 * deltaTime
+		p.velocity = mgl32.Vec3{0, 0, 0}
+	}
+
 	// Apply velocity
 	movement := p.velocity.Mul(deltaTime)
 	newPos := p.PhysicsPos.Add(movement)
@@ -308,10 +313,6 @@ func (p *Player) PlaceBlock(blockType world.BlockType) {
 		y++
 	case 5:
 		y--
-	}
-
-	if p.collidesWithPlayer(float32(x), float32(y), float32(z)) {
-		return
 	}
 
 	p.world.SetBlock(x, y, z, blockType)
