@@ -16,11 +16,13 @@ type Crosshair struct {
 	screenHeight int
 
 	vertexCount int
+
+	texture uint32
 }
 
 func NewCrosshair(screenWidth, screenHeight int) *Crosshair {
 	return &Crosshair{
-		color:        mgl32.Vec3{1.0, 1.0, 1.0}, // White
+		color:        mgl32.Vec3{1.0, 1.0, 0.0}, // White
 		size:         10.0,
 		thickness:    2.0,
 		screenWidth:  screenWidth,
@@ -34,6 +36,13 @@ func (c *Crosshair) Init() error {
 	gl.GenBuffers(1, &c.vbo)
 
 	checkGLError("Crosshair.Init after creating VAO/VBO")
+	// Create a 1x1 White Texture
+	gl.GenTextures(1, &c.texture)
+	gl.BindTexture(gl.TEXTURE_2D, c.texture)
+	white := []uint8{255, 255, 255, 255}
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(white))
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
 	c.generateGeometry()
 
@@ -100,6 +109,8 @@ func (c *Crosshair) Update(state interface{}) {
 }
 
 func (c *Crosshair) Draw(shaderProgram uint32, projection mgl32.Mat4) {
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindTexture(gl.TEXTURE_2D, c.texture)
 	gl.BindVertexArray(c.vao)
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(c.vertexCount))
 	gl.BindVertexArray(0)

@@ -23,6 +23,8 @@ type Hotbar struct {
 
 	fillVertexCount   int
 	borderVertexCount int
+
+	texture uint32
 }
 
 func NewHotbar(screenWidth, screenHeight int) *Hotbar {
@@ -41,6 +43,14 @@ func (h *Hotbar) Init() error {
 	gl.GenVertexArrays(1, &h.vao)
 	gl.GenBuffers(1, &h.vbo)
 	checkGLError("Hotbar.Init after creating VAO/VBO")
+
+	// Create 1x1 White Texture
+	gl.GenTextures(1, &h.texture)
+	gl.BindTexture(gl.TEXTURE_2D, h.texture)
+	white := []uint8{255, 255, 255, 255}
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(white))
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
 	h.generateGeometry()
 	return nil
@@ -170,6 +180,9 @@ func (h *Hotbar) Update(state interface{}) {
 }
 
 func (h *Hotbar) Draw(shaderProgram uint32, projection mgl32.Mat4) {
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindTexture(gl.TEXTURE_2D, h.texture)
+
 	gl.BindVertexArray(h.vao)
 	// Draw fill batch
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(h.fillVertexCount))

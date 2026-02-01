@@ -78,7 +78,7 @@ func (t *Text) generateGeometry() {
 		}
 
 		xpos := cursorX + glyph.Bearing.X()*t.scale
-		ypos := t.y - glyph.Bearing.Y()*t.scale
+		ypos := t.y + (glyph.Bearing.Y()-glyph.Size.Y())*t.scale
 
 		w := glyph.Size.X() * t.scale
 		h := glyph.Size.Y() * t.scale

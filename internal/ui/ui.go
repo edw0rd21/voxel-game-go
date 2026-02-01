@@ -15,6 +15,9 @@ var uiVertexShaderSource string
 //go:embed shaders/ui_fragment.glsl
 var uiFragmentShaderSource string
 
+// OpenGL error checking utility
+const DEBUG_GL_ERRORS = true
+
 // UIElement interface - all UI elements must implement this
 type UIElement interface {
 	Init() error
@@ -32,6 +35,9 @@ type UIRenderer struct {
 	height        int
 
 	whiteTexture uint32
+
+	font          *Font
+	notifications []Notification
 }
 
 func NewUIRenderer(width, height int) (*UIRenderer, error) {
@@ -224,10 +230,6 @@ func createRectOutline(x, y, width, height float32, color mgl32.Vec3) []float32 
 		x, y, color[0], color[1], color[2], 0.0, 0.0,
 	}
 }
-
-// OpenGL error checking utility
-// Set DEBUG_GL_ERRORS environment variable or change this constant to enable/disable
-const DEBUG_GL_ERRORS = true
 
 func checkGLError(location string) {
 	if !DEBUG_GL_ERRORS {

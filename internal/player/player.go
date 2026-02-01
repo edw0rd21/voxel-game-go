@@ -52,9 +52,11 @@ func (p *Player) Update(deltaTime float32) {
 	const gravity = 25.0
 	const terminalVelocity = -50.0
 
+	// Anti-stuck mechanism
 	if p.checkCollision(p.PhysicsPos) {
-		p.PhysicsPos[1] += 10.0 * deltaTime
-		p.velocity = mgl32.Vec3{0, 0, 0}
+		p.PhysicsPos[1] += 4.0 * deltaTime
+		p.velocity[1] = 0
+		p.grounded = false
 	}
 
 	// Apply velocity

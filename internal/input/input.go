@@ -27,18 +27,28 @@ type InputManager struct {
 	debugMode bool
 	flySpeed  float32
 	wireframe *bool
+
+	actionBindings map[string]glfw.Key
+	actionStates   map[string]*ActionState
+}
+
+type ActionState struct {
+	Pressed     bool
+	JustPressed bool
 }
 
 func NewInputManager(window *glfw.Window, cam *camera.Camera, p *player.Player, wireframe *bool) *InputManager {
 	im := &InputManager{
-		window:        window,
-		camera:        cam,
-		player:        p,
-		firstMouse:    true,
-		selectedBlock: world.BlockDirt,
-		cursorLocked:  true,
-		wireframe:     wireframe,
-		flySpeed:      20.0,
+		window:         window,
+		camera:         cam,
+		player:         p,
+		firstMouse:     true,
+		selectedBlock:  world.BlockDirt,
+		cursorLocked:   true,
+		wireframe:      wireframe,
+		flySpeed:       20.0,
+		actionBindings: make(map[string]glfw.Key),
+		actionStates:   make(map[string]*ActionState),
 	}
 
 	// Set up callbacks
@@ -46,7 +56,20 @@ func NewInputManager(window *glfw.Window, cam *camera.Camera, p *player.Player, 
 	window.SetMouseButtonCallback(im.mouseButtonCallback)
 	window.SetKeyCallback(im.keyCallback)
 
+	// Register defaults
+	im.RegisterAction("TOGGLE_DEBUG", glfw.KeyG)
+
 	return im
+}
+
+func (im *InputManager) RegisterAction(name string, key glfw.Key) {
+	im.actionBindings[name] = key
+	im.actionStates[name] = &ActionState{}
+}
+
+func (i *InputManager) IsActionJustPressed(action string) bool {
+	// Logic to check if key was pressed THIS frame only
+	return i.actionStates[action].JustPressed
 }
 
 func (im *InputManager) IsDebugMode() bool {
@@ -58,11 +81,17 @@ func (im *InputManager) GetSelectedBlock() world.BlockType {
 }
 
 func (im *InputManager) Update(deltaTime float32) {
-	// Close window
 	if im.window.GetKey(glfw.KeyEscape) == glfw.Press {
 		im.window.SetShouldClose(true)
 	}
 
+	for name, key := range im.actionBindings {
+		isDown := im.window.GetKey(key) == glfw.Press
+		state := im.actionStates[name]
+
+		state.JustPressed = isDown && !state.Pressed
+		state.Pressed = isDown
+	}
 	// STATE MACHINE: Switch controls based on mode
 	if im.debugMode {
 		im.updateDebugCamera(deltaTime)

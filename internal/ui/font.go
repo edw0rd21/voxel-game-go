@@ -25,9 +25,10 @@ type Font struct {
 	TextureID  uint32
 	Glyphs     map[rune]GlyphInfo
 	LineHeight float32
+	Ascent     float32
 }
 
-func LoadFont(filePath string, fontSize float64) (*Font, error) {
+func LoadFont(filePath string, fontSize float64, smooth bool) (*Font, error) {
 	// Read font file
 	fontBytes, err := os.ReadFile(filePath)
 	if err != nil {
@@ -40,9 +41,13 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 	}
 
 	// Setup Atlas Image (512x512 for basic ASCII)
-	const atlasSize = 512
-	const padding = 2
+	const atlasSize = 1024
+	const padding = 8
 	atlasImg := image.NewRGBA(image.Rect(0, 0, atlasSize, atlasSize))
+
+	for i := range atlasImg.Pix {
+		atlasImg.Pix[i] = 0
+	}
 
 	// Context for drawing text
 	c := freetype.NewContext()
@@ -51,23 +56,27 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 	c.SetFontSize(fontSize)
 	c.SetClip(atlasImg.Bounds())
 	c.SetDst(atlasImg)
-	c.SetSrc(image.White) // Draw white text
-	c.SetHinting(font.HintingFull)
+	c.SetSrc(image.White)
+	c.SetHinting(font.HintingNone)
 
-	// Create a Face to access low-level metrics
 	opts := truetype.Options{
 		Size:    fontSize,
 		DPI:     72,
-		Hinting: font.HintingFull,
+		Hinting: font.HintingNone,
 	}
 	face := truetype.NewFace(f, &opts)
 
-	// Calculate global metrics
 	metrics := face.Metrics()
-	// Convert fixed.Int26_6 to float32
-	ascent := float32(metrics.Ascent.Ceil())
-	descent := float32(metrics.Descent.Ceil())
+	ascent := float32(metrics.Ascent) / 64.0
+	descent := float32(metrics.Descent) / 64.0
 	lineHeight := ascent + descent
+
+	// debug
+	fmt.Printf("=== FONT METRICS DEBUG ===\n")
+	fmt.Printf("Font: %s, Size: %.1f\n", filePath, fontSize)
+	fmt.Printf("Ascent: %.2f\n", ascent)
+	fmt.Printf("Descent: %.2f\n", descent)
+	fmt.Printf("LineHeight: %.2f\n", lineHeight)
 
 	// Render Glyphs
 	glyphs := make(map[rune]GlyphInfo)
@@ -89,7 +98,7 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 		if currentX+gw+padding >= atlasSize {
 			currentX = padding
 			currentY += maxRowHeight + padding
-			maxRowHeight = 0 // Reset row height
+			maxRowHeight = 0
 		}
 
 		if currentY+gh+padding >= atlasSize {
@@ -101,14 +110,21 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 		pt := fixed.P(dotX, dotY)
 		c.DrawString(string(ch), pt)
 
+		halfTexel := 0.5 / float32(atlasSize)
 		// Normalize pixel coordinates to 0.0-1.0 range
-		uMin := float32(currentX) / float32(atlasSize)
-		vMin := float32(currentY) / float32(atlasSize)
-		uMax := float32(currentX+gw) / float32(atlasSize)
-		vMax := float32(currentY+gh) / float32(atlasSize)
+		uMin := float32(currentX)/float32(atlasSize) + halfTexel
+		vMin := float32(currentY)/float32(atlasSize) + halfTexel
+		uMax := float32(currentX+gw)/float32(atlasSize) - halfTexel
+		vMax := float32(currentY+gh)/float32(atlasSize) - halfTexel
 
 		bearingX := float32(b.Min.X) / 64.0
 		bearingY := float32(b.Max.Y) / 64.0
+
+		// debug
+		if ch == 'A' || ch == 'g' || ch == 'y' || ch == 'M' || ch == 'p' {
+			fmt.Printf("Char '%c': b.Min.Y=%.2f, b.Max.Y=%.2f, bearingY=%.2f, size=(%.0f,%.0f)\n",
+				ch, float32(b.Min.Y)/64.0, float32(b.Max.Y)/64.0, bearingY, float32(gw), float32(gh))
+		}
 
 		glyphs[ch] = GlyphInfo{
 			UVMin:   mgl32.Vec2{uMin, vMin},
@@ -135,7 +151,7 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
 		0,
-		gl.RGBA, // Keeping RGBA for shader compatibility
+		gl.RGBA,
 		int32(atlasSize),
 		int32(atlasSize),
 		0,
@@ -144,11 +160,18 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 		gl.Ptr(atlasImg.Pix),
 	)
 
+	var filter int32
+	if smooth {
+		filter = gl.LINEAR
+	} else {
+		filter = gl.NEAREST
+	}
+
 	// Linear filtering for smooth text
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter)
 
 	gl.BindTexture(gl.TEXTURE_2D, 0)
 
@@ -156,6 +179,7 @@ func LoadFont(filePath string, fontSize float64) (*Font, error) {
 		TextureID:  texID,
 		Glyphs:     glyphs,
 		LineHeight: lineHeight,
+		Ascent:     ascent,
 	}, nil
 
 }

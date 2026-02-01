@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"runtime"
 
@@ -61,16 +60,24 @@ func main() {
 	gl.Enable(gl.DEPTH_TEST)
 	gl.Enable(gl.CULL_FACE)
 	gl.CullFace(gl.BACK)
+
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
 	gl.ClearColor(0.53, 0.81, 0.92, 1.0) // Sky blue
 
 	// Print OpenGL version
 	version := gl.GoStr(gl.GetString(gl.VERSION))
 	log.Println("OpenGL version:", version)
 
-	// Load Font (UI)
-	pixelFont, err := ui.LoadFont("assets/fonts/PixelifySans-Regular.ttf", 24)
+	// Load Fonts
+	pixelFont, err := ui.LoadFont("assets/fonts/PixelifySans-Regular.ttf", 24, false)
 	if err != nil {
 		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/PixelifySans-Regular.ttf exists!", err)
+	}
+	cleanFont, err := ui.LoadFont("assets/fonts/Roboto-Bold.ttf", 24, true)
+	if err != nil {
+		log.Fatalf("Failed to load font: %v. Make sure assets/fonts/Roboto-Bold exists!", err)
 	}
 
 	// Load Texture Atlas (World)
@@ -97,6 +104,15 @@ func main() {
 	defer uiRenderer.Cleanup()
 
 	// Add UI elements
+	notifications := ui.NewNotificationSystem(cleanFont, windowWidth, windowHeight)
+	if err := uiRenderer.AddElement(notifications); err != nil {
+		log.Fatalln("failed to add notification system:", err)
+	}
+	notifications.Add("Welcome to Voxel Engine!")
+
+	debugLayer := ui.NewDebugLayer(pixelFont, windowWidth, windowHeight)
+	uiRenderer.AddElement(debugLayer)
+
 	crosshair := ui.NewCrosshair(windowWidth, windowHeight)
 	if err := uiRenderer.AddElement(crosshair); err != nil {
 		log.Fatalln("failed to add crosshair:", err)
@@ -105,14 +121,6 @@ func main() {
 	hotbar := ui.NewHotbar(windowWidth, windowHeight)
 	if err := uiRenderer.AddElement(hotbar); err != nil {
 		log.Fatalln("failed to add hotbar:", err)
-	}
-
-	fpsText := ui.NewText(pixelFont, "FPS: 0", 10, 30, 1.0, mgl32.Vec3{1.0, 1.0, 0.0})
-	if err := fpsText.Init(); err != nil {
-		log.Fatalln("failed to init text:", err)
-	}
-	if err := uiRenderer.AddElement(fpsText); err != nil {
-		log.Fatalln("failed to add text:", err)
 	}
 
 	// Window resize callback
@@ -128,6 +136,7 @@ func main() {
 
 		// Update UI elements with new size
 		screenSize := &ui.ScreenSize{Width: logicalWidth, Height: logicalHeight}
+		//notifications.Update(nil)
 		crosshair.Update(screenSize)
 		hotbar.Update(screenSize)
 	})
@@ -174,14 +183,35 @@ func main() {
 		frameCount++
 		if currentTime-fpsTime >= 1.0 {
 			currentFPS = float64(frameCount) / (currentTime - fpsTime)
-			fpsText.SetContent(fmt.Sprintf("FPS: %.0f", currentFPS))
-			fpsText.Update(nil)
 			frameCount = 0
 			fpsTime = currentTime
 		}
 
 		// Handle input
 		inputMgr.Update(deltaTime)
+
+		if inputMgr.IsActionJustPressed("TOGGLE_DEBUG") {
+			// Toggle Persistent HUD
+			isVisible := debugLayer.Toggle()
+
+			// Trigger Transient Notification
+			if isVisible {
+				notifications.Add("Debug Mode: ON")
+			} else {
+				notifications.Add("Debug Mode: OFF")
+			}
+		}
+
+		debugLayer.UpdateInfo(
+			currentFPS,
+			cam.Position,
+			int(cam.Position[0])>>4,
+			int(cam.Position[2])>>4,
+			cam.Front,
+		)
+		debugLayer.Update(nil)
+
+		notifications.Update(nil)
 
 		// Update player - ONLY update player physics if NOT in debug mode
 		if !inputMgr.IsDebugMode() {
@@ -217,8 +247,17 @@ func main() {
 			)
 		}
 
+		gl.Disable(gl.DEPTH_TEST)
+		gl.DepthMask(false)
+		gl.Enable(gl.BLEND)
+		gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+		gl.Disable(gl.CULL_FACE)
 		// Render UI
 		uiRenderer.Render()
+
+		gl.Enable(gl.CULL_FACE)
+		gl.DepthMask(true)
+		gl.Enable(gl.DEPTH_TEST)
 
 		// Swap buffers and poll events
 		window.SwapBuffers()
