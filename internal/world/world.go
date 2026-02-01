@@ -75,7 +75,7 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 				amplitude = 2.0 + ((ruggedness + 1.0) * 8.0)
 			}
 
-			baseLevel := 30.0
+			baseLevel := 25.0
 			height := baseLevel +
 				(baseElevation * 20.0) +
 				(mountainShape * amplitude) +
@@ -105,12 +105,16 @@ func (w *World) generateChunk(chunkX, chunkZ int) *Chunk {
 						chunk.Blocks[x][y][z].Type = BlockSnow
 					} else if y > 72+int(jitter*7) {
 						chunk.Blocks[x][y][z].Type = BlockStone
+					} else if y <= 33 {
+						chunk.Blocks[x][y][z].Type = BlockSand
 					} else {
 						chunk.Blocks[x][y][z].Type = BlockGrass
 					}
 				} else if y > heightInt-4 {
 					if y > 80 {
 						chunk.Blocks[x][y][z].Type = BlockStone
+					} else if heightInt <= 33 {
+						chunk.Blocks[x][y][z].Type = BlockSand
 					} else {
 						chunk.Blocks[x][y][z].Type = BlockDirt
 					}

@@ -32,7 +32,7 @@ func NewHotbar(screenWidth, screenHeight int) *Hotbar {
 		screenWidth:  screenWidth,
 		screenHeight: screenHeight,
 		selectedSlot: 0, // Dirt by default
-		slotCount:    3, // 3 block types
+		slotCount:    6, // 3 block types
 		slotSize:     50.0,
 		padding:      5.0,
 		needsUpdate:  true,
@@ -208,6 +208,12 @@ func getBlockColorForSlot(slot int) mgl32.Vec3 {
 		return mgl32.Vec3{0.2, 0.8, 0.2}
 	case 2: // Stone
 		return mgl32.Vec3{0.5, 0.5, 0.5}
+	case 3: // Snow
+		return mgl32.Vec3{1.0, 1.0, 1.0}
+	case 4: // Sand
+		return mgl32.Vec3{0.9, 0.8, 0.6}
+	case 5: // Wood
+		return mgl32.Vec3{0.5, 0.3, 0.1}
 	default:
 		return mgl32.Vec3{1.0, 1.0, 1.0}
 	}

@@ -207,6 +207,12 @@ func (im *InputManager) keyCallback(w *glfw.Window, key glfw.Key, scancode int, 
 			im.selectedBlock = world.BlockGrass
 		case glfw.Key3:
 			im.selectedBlock = world.BlockStone
+		case glfw.Key4:
+			im.selectedBlock = world.BlockSnow
+		case glfw.Key5:
+			im.selectedBlock = world.BlockSand
+		case glfw.Key6:
+			im.selectedBlock = world.BlockWood
 		case glfw.KeyTab:
 			im.cursorLocked = !im.cursorLocked
 			if im.cursorLocked {

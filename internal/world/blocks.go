@@ -9,6 +9,8 @@ const (
 	BlockGrass = 2
 	BlockStone = 3
 	BlockSnow  = 4
+	BlockSand  = 5
+	BlockWood  = 6
 )
 
 // Texture Atlas Constants
@@ -25,6 +27,8 @@ var (
 	TexGrassSide = [2]float32{7, 4}
 	TexStone     = [2]float32{3, 4}
 	TexSnow      = [2]float32{3, 5}
+	TexSand      = [2]float32{3, 6}
+	TexWood      = [2]float32{0, 1}
 )
 
 // Texture Coordinates helper
@@ -38,6 +42,10 @@ func GetBlockUVs(blockType BlockType, faceDirection int) (float32, float32) {
 		tileCoords = TexStone
 	case BlockSnow:
 		tileCoords = TexSnow
+	case BlockSand:
+		tileCoords = TexSand
+	case BlockWood:
+		tileCoords = TexWood
 	case BlockGrass:
 		if faceDirection == 4 { // Top
 			tileCoords = TexGrassTop
